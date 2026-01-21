@@ -162,10 +162,6 @@ draw_arrow(ax3, (obj_x, obj_y), (obj_x+0.75, obj_y+1.5), RED, r'$\vec{N}$', (0.5
 # 중력 (아래로)
 draw_arrow(ax3, (obj_x, obj_y), (obj_x, obj_y-2), BLUE, r'$\vec{W}$', (-0.5, 0), lw=3)
 
-# # 중력 성분 (점선)
-# ax3.plot([obj_x, obj_x+1], [obj_y-2, obj_y-2-0.5], 'b--', lw=1.5, alpha=0.7)
-# ax3.plot([obj_x, obj_x+1], [obj_y-2, obj_y-2+0.0], 'b--', lw=1.5, alpha=0.7)
-
 plt.tight_layout()
 plt.savefig('/Users/rottenapplea/coding/physics_blog_2025/src/content/posts/physics/img/fbd_03_incline.png', dpi=150, bbox_inches='tight')
 plt.close()
