@@ -699,29 +699,185 @@ class Ceiling(PhysicsObject):
 # Pulley (도르래)
 # ============================================
 class Pulley(PhysicsObject):
-    """도르래"""
-    
-    def __init__(self, ax, x=0, y=0, radius=0.25,
+    """도르래
+
+    Args:
+        on: 설치할 표면 (Incline, Table 등)
+        t: 표면 위 위치 (0=왼쪽 끝, 1=오른쪽 끝)
+        for_obj: 연결할 물체 (Box 등) - 도르래 크기와 높이를 이 물체에 맞춤
+        offset: 표면 끝에서 도르래까지의 추가 거리 (기본 0)
+        show_support: 지지대 표시 여부 (기본 True)
+        support_width: 지지대 두께
+    """
+
+    def __init__(self, ax, x=0, y=0, radius=None, on=None, t=0.5,
+                 for_obj=None, offset=0, show_support=True, support_width=0.08,
                  color='white', edgecolor='black', lw=1.5, zorder=10):
         super().__init__(ax)
-        
-        self._center = Point(x, y)
-        self._radius = radius
-        self._width = radius * 2
-        self._height = radius * 2
-        self._right = Point(x + radius, y)
-        self._left = Point(x - radius, y)
+
+        self._surface_transform = None
+
+        # on 파라미터 처리
+        if on is not None:
+            # 표면의 로컬 좌표계 획득
+            if hasattr(on, 'get_surface_transform'):
+                transform = on.get_surface_transform(t)
+                self._surface_transform = transform
+
+                # 도르래 크기와 높이 결정
+                if for_obj is not None and hasattr(for_obj, '_height'):
+                    # 도르래 반경 = 물체 높이의 1/4 (직경이 높이의 절반)
+                    if radius is None:
+                        radius = for_obj._height / 4
+
+                    # 물체의 연결점 (t=0이면 left, t=1이면 right)
+                    if t <= 0.5:
+                        connect_point = for_obj.left
+                    else:
+                        connect_point = for_obj.right
+
+                    # 연결점을 로컬 좌표로 변환
+                    local_connect = transform.world_to_local(connect_point)
+                    # 도르래 top이 연결점 높이에 오도록 (center = top - radius)
+                    pulley_height = local_connect.y
+                else:
+                    # 기본값
+                    if radius is None:
+                        radius = 0.25
+                    pulley_height = radius * 2
+
+                self._radius = radius
+                self._width = radius * 2
+                self._height = radius * 2
+
+                # 도르래 x 위치: 표면 끝에서 충분히 바깥으로
+                # 경사면의 경우 수직으로 매달린 물체가 경사면과 겹치지 않도록
+                # 도르래 중심이 표면 끝에서 (offset + radius * 2) 만큼 떨어지도록
+                if t <= 0.5:
+                    local_x = -offset - for_obj._width/1.5  # 왼쪽 바깥
+                else:
+                    local_x = offset + for_obj._width/1.5   # 오른쪽 바깥
+
+                local_center = Point(local_x, pulley_height)
+                self._center = transform.local_to_world(local_center)
+
+                # 지지대 그리기 (표면에서 도르래까지)
+                if show_support:
+                    if isinstance(on, Incline) and on._direction == '-':
+                        support_base = Point(on.slope_start.x+radius/2, on.slope_start.y-radius/2)
+                    # support_base = transform.local_to_world(Point(local_x, 0))
+                        self._draw_support(ax, support_base, self._center,
+                                        support_width, edgecolor, zorder-1)
+                    elif isinstance(on, Incline) and on._direction == '+':
+                        support_base = Point(on.slope_start.x-radius/2, on.slope_start.y-radius/2)
+                        self._draw_support(ax, support_base, self._center,
+                                        support_width, edgecolor, zorder-1)
+                    elif isinstance(on, Table):
+                        # t 값으로 왼쪽/오른쪽 구분
+                        if t <= 0.5:
+                            # 왼쪽 끝
+                            table_x = on._center.x - on._width / 2
+                        else:
+                            # 오른쪽 끝
+                            table_x = on._center.x + on._width / 2
+                        support_base = Point(table_x, on._top_y)
+                        self._draw_support(ax, support_base, self._center,
+                                        support_width, edgecolor, zorder-1)
+            else:
+                if radius is None:
+                    radius = 0.25
+                self._radius = radius
+                self._width = radius * 2
+                self._height = radius * 2
+                self._center = Point(x, y)
+        else:
+            if radius is None:
+                radius = 0.25
+            self._radius = radius
+            self._width = radius * 2
+            self._height = radius * 2
+            self._center = Point(x, y)
+
+        # 도르래 그리기
+        self._draw_pulley(ax, color, edgecolor, lw, zorder)
+
+    def _draw_pulley(self, ax, color, edgecolor, lw, zorder):
+        """도르래 원 그리기"""
+        x, y = self._center.x, self._center.y
 
         circle_out = patches.Circle(
-            (x, y), radius,
+            (x, y), self._radius,
             facecolor=color, edgecolor=edgecolor, lw=lw, zorder=zorder
         )
         circle_in = patches.Circle(
-            (x, y), radius * 0.7,
+            (x, y), self._radius * 0.7,
             facecolor=color, edgecolor=edgecolor, lw=lw, zorder=zorder
         )
         ax.add_patch(circle_out)
         ax.add_patch(circle_in)
+
+    def _draw_support(self, ax, base, top, width, color, zorder):
+        """지지대 그리기"""
+        base = Point(base)
+        top = Point(top)
+
+        # 방향 벡터
+        direction = top - base
+        length = base.distance_to(top)
+
+        if length < 0.01:
+            return
+
+        # 수직 벡터 (지지대 두께 방향)
+        perp = Point(-direction.y / length, direction.x / length)
+
+        # 사각형 꼭짓점
+        corners = [
+            base + perp * (width / 2),
+            base - perp * (width / 2),
+            top - perp * (width / 2),
+            top + perp * (width / 2),
+        ]
+
+        polygon = patches.Polygon(
+            [(c.x, c.y) for c in corners],
+            facecolor='#888888', edgecolor=color,
+            lw=1, zorder=zorder, closed=True
+        )
+        ax.add_patch(polygon)
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @property
+    def top(self):
+        """도르래 위쪽 (로프 연결점)"""
+        if self._surface_transform:
+            # 표면 법선 방향으로 반경만큼
+            return self._center + self._surface_transform.normal * self._radius
+        return Point(self._center.x, self._center.y + self._radius)
+
+    @property
+    def bottom(self):
+        """도르래 아래쪽 (로프 연결점)"""
+        if self._surface_transform:
+            return self._center - self._surface_transform.normal * self._radius
+        return Point(self._center.x, self._center.y - self._radius)
+
+    @property
+    def left(self):
+        """도르래 왼쪽 (로프 연결점)"""
+        if self._surface_transform:
+            return self._center - self._surface_transform.tangent * self._radius
+        return Point(self._center.x - self._radius, self._center.y)
+
+    @property
+    def right(self):
+        """도르래 오른쪽 (로프 연결점)"""
+        if self._surface_transform:
+            return self._center + self._surface_transform.tangent * self._radius
+        return Point(self._center.x + self._radius, self._center.y)
 
 
 # ============================================
@@ -749,28 +905,28 @@ class Rope:
             end = Point(start.x, end.y)
         
         # 수직인지 확인
-        if abs(start.x - end.x) < 0.01:  # 수직
-            ax.fill_betweenx(
-                [min(start.y, end.y), max(start.y, end.y)],
-                start.x - width, start.x + width,
-                color=color, alpha=0.8
-            )
+        # if abs(start.x - end.x) < 0.01:  # 수직
+        #     ax.fill_betweenx(
+        #         [min(start.y, end.y), max(start.y, end.y)],
+        #         start.x - width, start.x + width,
+        #         color=color, alpha=0.8
+        #     )
             
-            # 꼬임 표현
-            if show_texture:
-                for y in np.arange(min(start.y, end.y), max(start.y, end.y), 0.15):
-                    ax.plot([start.x - width, start.x + width], 
-                            [y, y + 0.1], color='#5D3A1A', lw=1)
+        #     # 꼬임 표현
+        #     if show_texture:
+        #         for y in np.arange(min(start.y, end.y), max(start.y, end.y), 0.15):
+        #             ax.plot([start.x - width, start.x + width], 
+        #                     [y, y + 0.1], color='#5D3A1A', lw=1)
             
-            # 테두리
-            ax.plot([start.x - width, start.x - width], 
-                    [start.y, end.y], color='#5D3A1A', lw=1)
-            ax.plot([start.x + width, start.x + width], 
-                    [start.y, end.y], color='#5D3A1A', lw=1)
-        else:
+        #     # 테두리
+        #     ax.plot([start.x - width, start.x - width], 
+        #             [start.y, end.y], color='#5D3A1A', lw=1)
+        #     ax.plot([start.x + width, start.x + width], 
+        #             [start.y, end.y], color='#5D3A1A', lw=1)
+        # else:
             # 일반 선
-            ax.plot([start.x, end.x], [start.y, end.y], 
-                    color=color, lw=lw)
+        ax.plot([start.x, end.x], [start.y, end.y], 
+                color=color, lw=lw)
 
 
 # ============================================
@@ -790,9 +946,10 @@ class Table(PhysicsObject):
         
         # 테이블 상판
         ax.fill_between(
-            [x, x + width], 
-            [y, y],[y + height, y + height],
-            color=color, alpha=alpha
+            [x, x + width],
+            [y, y], [y + height, y + height],
+            color=color, alpha=alpha,
+            edgecolor=edgecolor, linewidth=1.5
         )
 
     
