@@ -263,8 +263,8 @@ class UniformMotion(Scene):
             run_time=0.75
         )
 
-        # === 9. v-t 그래프 적분 면적 = 이동거리 시각화 ===
-        area_text = Text("v-t 그래프 아래 면적 = 이동거리 s", font_size=24, color=YELLOW)
+        # === 9. v-t 그래프 적분 면적 = 변위 시각화 ===
+        area_text = Text("v-t 그래프 아래 면적 = 변위 s", font_size=24, color=YELLOW)
         area_text.to_edge(UP).shift(DOWN * 0.8)
         self.play(Write(area_text), run_time=0.75)
 
