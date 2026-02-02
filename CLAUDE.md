@@ -124,6 +124,33 @@ self.play(length_tracker.animate.set_value(5.0), run_time=1.5)  # 늘리기
 self.play(length_tracker.animate.set_value(1.5), run_time=1.5)  # 압축
 ```
 
+### 주석 스타일
+- 메서드(Phase) 구분: `# ═══════════ Phase N: 이름 ═══════════`
+- 메서드 내부 단계: `# ── N. 설명 ──`
+- 클래스 레벨 상수 그룹: `# ── 그룹명 ──`
+
+### 폰트 크기 상수
+클래스 레벨에 `FONT_` 접두사 상수로 정의 → 매직 넘버 제거
+
+| 상수 | 값 | 용도 |
+|------|-----|------|
+| FONT_TITLE | 80 | 인트로/아웃트로 타이틀 |
+| FONT_SUBTITLE | 28 | 실험 라벨 |
+| FONT_LABEL | 20 | 오브젝트/커브 라벨 |
+| FONT_AXIS_LABEL | 16 | 축 이름, 틱 라벨 |
+| FONT_AXIS_NUM | 20 | 축 숫자 |
+| FONT_CALC | 36 | 계산 과정 |
+| FONT_CALC_RESULT | 40 | 계산 결과 (강조) |
+
+### 변수 네이밍
+- 축약 금지: `ball_a` (O) vs `ba` (X)
+- 레이아웃 좌표 → 메서드 상단 대문자 상수 (`OBJ_X`, `FLOOR_Y` 등)
+- ValueTracker → 용도 명시 이름 (`coll_tracker`, `v_tracker`)
+
+### 헬퍼 메서드 추출
+- 동일 로직 2회 이상 반복 → `_make_xxx` private 메서드로 추출
+- 예시: `_make_deformed_floor()`
+
 ### 코드 작성 후
 - 반드시 `./venv/bin/manim -ql` 저화질 렌더링으로 에러 확인
 - 에러 발생 시 수정 후 재렌더링

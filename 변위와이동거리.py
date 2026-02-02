@@ -1,206 +1,278 @@
 from manim import *
 import numpy as np
 
+
 class DisplacementVsDistance(Scene):
+    # ── 폰트 크기 ──
+    FONT_TITLE = 80
+    FONT_SUBTITLE = 28
+    FONT_LABEL = 24
+
     def construct(self):
-        # === Title ===
-        title = Text("변위 vs 이동거리", font_size=48, color=WHITE)
-        title.to_edge(UP)
-        self.play(Write(title))
+        self.intro()
+        self.clear_screen()
+        self.phase1_straight_line()
+        self.clear_screen()
+        self.phase2_curved_path()
+        self.clear_screen()
+        self.phase3_comparison()
+        self.clear_screen()
+        self.outro()
+
+    # ═══════════ Utilities ═══════════
+
+    def clear_screen(self):
+        self.play(*[FadeOut(m) for m in self.mobjects])
         self.wait(0.5)
 
-        # === 1. 두 점 생성 ===
-        point_A = Dot(LEFT * 4, color=BLUE, radius=0.15)
-        point_B = Dot(RIGHT * 4, color=RED, radius=0.15)
+    # ═══════════ Phase 0: Intro ═══════════
 
-        label_A = Text("A", font_size=32, color=BLUE).next_to(point_A, DOWN)
-        label_B = Text("B", font_size=32, color=RED).next_to(point_B, DOWN)
+    def intro(self):
+        title = Text("변위와 이동거리", font_size=self.FONT_TITLE, color=WHITE)
+        self.play(Write(title), run_time=1.5)
+        self.wait(1.5)
 
-        self.play(
-            Create(point_A), Write(label_A),
-            Create(point_B), Write(label_B),
-            run_time=1
+    # ═══════════ Phase 1: 직선 이동 ═══════════
+
+    def phase1_straight_line(self):
+        # ── 1. 제목 ──
+        subtitle = Text("직선 이동", font_size=self.FONT_SUBTITLE, color=WHITE)
+        subtitle.to_edge(UL)
+        self.play(Write(subtitle))
+
+        # ── 2. 두 점 ──
+        POINT_A = LEFT * 4 + DOWN * 0.5
+        POINT_B = RIGHT * 4 + DOWN * 0.5
+
+        dot_a = Dot(POINT_A, color=BLUE, radius=0.15)
+        dot_b = Dot(POINT_B, color=RED, radius=0.15)
+        label_a = Text("A", font_size=self.FONT_LABEL, color=BLUE).next_to(dot_a, DOWN)
+        label_b = Text("B", font_size=self.FONT_LABEL, color=RED).next_to(dot_b, DOWN)
+
+        self.play(Create(dot_a), Write(label_a), Create(dot_b), Write(label_b), run_time=1)
+        self.wait(0.3)
+
+        # ── 3. 직선 경로를 따라 점 이동 ──
+        straight_path = Line(POINT_A, POINT_B, color=ORANGE, stroke_width=5)
+        moving_dot = Dot(POINT_A, color=YELLOW, radius=0.15)
+        trace = TracedPath(moving_dot.get_center, stroke_color=ORANGE, stroke_width=3, stroke_opacity=0.6)
+        self.add(trace)
+
+        self.play(MoveAlongPath(moving_dot, straight_path), run_time=2)
+        self.wait(0.3)
+
+        # ── 4. 변위와 이동거리 동시 표시 ──
+        displacement_arrow = Arrow(
+            POINT_A, POINT_B, color=GREEN, buff=0,
+            stroke_width=6, max_tip_length_to_length_ratio=0.08,
         )
+        straight_length = np.linalg.norm(np.array(POINT_B) - np.array(POINT_A))
+
+        disp_label = VGroup(
+            Text("변위", font_size=self.FONT_LABEL, color=GREEN),
+            MathTex(f"= {straight_length:.1f}", font_size=28, color=GREEN),
+        ).arrange(RIGHT, buff=0.1).next_to(displacement_arrow, UP, buff=0.3)
+
+        dist_label = VGroup(
+            Text("이동거리", font_size=self.FONT_LABEL, color=ORANGE),
+            MathTex(f"= {straight_length:.1f}", font_size=28, color=ORANGE),
+        ).arrange(RIGHT, buff=0.1).next_to(displacement_arrow, DOWN * 2, buff=0.3)
+
+        self.play(GrowArrow(displacement_arrow), run_time=1)
+        self.play(Write(disp_label), Write(dist_label))
         self.wait(0.5)
 
-        # === 2. 곡선 경로 생성 (이동거리) - 복잡한 곡선 ===
-        self.play(FadeOut(title))
+        # ── 5. 결론 자막 ──
+        conclusion = Text("직선 이동 → 변위 = 이동거리", font_size=self.FONT_SUBTITLE, color=YELLOW)
+        conclusion.to_edge(DOWN, buff=0.5)
+        conclusion_bg = SurroundingRectangle(conclusion, color=WHITE, fill_color=BLACK, fill_opacity=0.85, buff=0.15)
+        self.play(FadeIn(conclusion_bg), Write(conclusion))
+        self.wait(1.5)
+
+    # ═══════════ Phase 2: 곡선 이동 ═══════════
+
+    def phase2_curved_path(self):
+        # ── 1. 제목 ──
+        subtitle = Text("곡선 이동", font_size=self.FONT_SUBTITLE, color=WHITE)
+        subtitle.to_edge(UL)
+        self.play(Write(subtitle))
+
+        # ── 2. 두 점 ──
+        POINT_A = LEFT * 4 + DOWN * 0.5
+        POINT_B = RIGHT * 4 + DOWN * 0.5
+
+        dot_a = Dot(POINT_A, color=BLUE, radius=0.15)
+        dot_b = Dot(POINT_B, color=RED, radius=0.15)
+        label_a = Text("A", font_size=self.FONT_LABEL, color=BLUE).next_to(dot_a, DOWN)
+        label_b = Text("B", font_size=self.FONT_LABEL, color=RED).next_to(dot_b, DOWN)
+
+        self.play(Create(dot_a), Write(label_a), Create(dot_b), Write(label_b), run_time=1)
+        self.wait(0.3)
+
+        # ── 3. 곡선 경로 생성 ──
         curved_path = VMobject(color=ORANGE, stroke_width=5)
         path_points = [
-            point_A.get_center(),
-            point_A.get_center() + RIGHT*1.5 + UP*2,
-            point_A.get_center() + RIGHT*3 + DOWN*0.5,
-            point_A.get_center() + RIGHT*4.5 + UP*1.5,
-            point_A.get_center() + RIGHT*6 + UP*2.5,
-            point_B.get_center() + LEFT*1 + UP*1,
-            point_B.get_center(),
+            POINT_A,
+            POINT_A + RIGHT * 1.5 + UP * 2,
+            POINT_A + RIGHT * 3 + DOWN * 0.5,
+            POINT_A + RIGHT * 4.5 + UP * 1.5,
+            POINT_A + RIGHT * 6 + UP * 2.5,
+            POINT_B + LEFT * 1 + UP * 1,
+            POINT_B,
         ]
         curved_path.set_points_smoothly(path_points)
 
-        # 이동거리 레이블
-        distance_label = Text("실제 이동한 거리 = 이동거리 (Distance)", font_size=24, color=ORANGE, )
-        distance_label.next_to(curved_path, UP, buff=0.3)
+        # ── 4. 곡선 따라 점 이동 (MoveAlongPath) ──
+        moving_dot = Dot(POINT_A, color=YELLOW, radius=0.15)
+        self.add(moving_dot)
+        self.play(
+            Create(curved_path),
+            MoveAlongPath(moving_dot, curved_path),
+            run_time=2.5,
+        )
+        self.wait(0.3)
+
+        # ── 5. 이동거리 라벨 (곡선 최고점 위) ──
+        curved_length = curved_path.get_arc_length()
+        distance_label = VGroup(
+            Text("이동거리", font_size=self.FONT_LABEL, color=ORANGE),
+            MathTex(f"= {curved_length:.1f}", font_size=28, color=ORANGE),
+        ).arrange(RIGHT, buff=0.1)
+        distance_label.next_to(curved_path, UP + RIGHT, buff=0.3)
 
         self.play(Write(distance_label))
 
-        # === 3. 곡선 경로 따라 점 이동 ===
-        moving_dot = Dot(color=YELLOW, radius=0.15) 
-        moving_dot.move_to(curved_path.get_start())
-        self.add(moving_dot)
-
-        moving_dot.add_updater(lambda m: m.move_to(curved_path.get_end()))
-        self.play(Create(curved_path), run_time=2.5)
-        moving_dot.clear_updaters()
-
-        self.wait(0.5)
-
-        # === 4. 변위 화살표 생성 (벡터) ===
+        # ── 6. 변위 화살표 ──
         displacement_arrow = Arrow(
-            point_A.get_center(),
-            point_B.get_center(),
-            color=GREEN,
-            stroke_width=6,
-            buff=0,
-            max_tip_length_to_length_ratio=0.08
+            POINT_A, POINT_B, color=GREEN, buff=0,
+            stroke_width=6, max_tip_length_to_length_ratio=0.08,
         )
+        straight_length = np.linalg.norm(np.array(POINT_B) - np.array(POINT_A))
 
-        # 변위 레이블
-        displacement_label = Text("위치 변화량 = 변위 (Displacement)", font_size=24, color=GREEN)
-        displacement_label.next_to(displacement_arrow, DOWN, buff=0.4)
+        displacement_label = VGroup(
+            Text("변위", font_size=self.FONT_LABEL, color=GREEN),
+            MathTex(f"= {straight_length:.1f}", font_size=28, color=GREEN),
+        ).arrange(RIGHT, buff=0.1)
+        displacement_label.next_to(displacement_arrow, DOWN, buff=0.3)
 
-        # 변위 화살표 표시
-        self.play(GrowArrow(displacement_arrow), run_time=1.5)
+        self.play(GrowArrow(displacement_arrow), run_time=1)
         self.play(Write(displacement_label))
         self.wait(0.5)
 
-        # === 5. 거리 계산 및 표시 ===
+        # ── 7. 수치 비교 박스 ──
+        comparison_text = VGroup(
+            VGroup(
+                Text("이동거리", font_size=20, color=ORANGE),
+                MathTex(f"s = {curved_length:.1f}", font_size=28, color=ORANGE),
+            ).arrange(DOWN, buff=0.1),
+            MathTex(r">", font_size=36, color=YELLOW),
+            VGroup(
+                Text("변위", font_size=20, color=GREEN),
+                MathTex(f"|d| = {straight_length:.1f}", font_size=28, color=GREEN),
+            ).arrange(DOWN, buff=0.1),
+        ).arrange(RIGHT, buff=0.5)
+        comparison_text.to_edge(DOWN, buff=0.5)
+        comparison_bg = SurroundingRectangle(comparison_text, color=WHITE, fill_color=BLACK, fill_opacity=0.85, buff=0.2)
 
-        # 직선 거리 계산
-        straight_length = np.linalg.norm(
-            np.array(point_B.get_center()) - np.array(point_A.get_center())
+        self.play(FadeIn(comparison_bg), Write(comparison_text))
+        self.wait(1.5)
+
+    # ═══════════ Phase 3: 비교 요약 ═══════════
+
+    def phase3_comparison(self):
+        # ── 1. 왼쪽: 직선 케이스 ──
+        LEFT_CENTER = LEFT * 3.5
+
+        straight_a = Dot(LEFT_CENTER + LEFT * 1.5, color=BLUE, radius=0.1)
+        straight_b = Dot(LEFT_CENTER + RIGHT * 1.5, color=RED, radius=0.1)
+        straight_arrow = Arrow(
+            straight_a.get_center(), straight_b.get_center(),
+            color=GREEN, buff=0, stroke_width=4,
+            max_tip_length_to_length_ratio=0.12,
         )
+        straight_path = Line(
+            straight_a.get_center(), straight_b.get_center(),
+            color=ORANGE, stroke_width=3,
+        ).shift(UP * 0.15)
 
-        # 곡선 길이 계산 (근사)
-        curved_length = curved_path.get_arc_length()
+        straight_group = VGroup(straight_a, straight_b, straight_arrow, straight_path)
+        straight_title = Text("직선 이동", font_size=22, color=WHITE)
+        straight_title.next_to(straight_group, UP, buff=0.4)
 
-        # 정보 박스
-        displacement_info = VGroup(
-            Text("변위:", font_size=24, color=GREEN),
-            Text(f"|d| = {straight_length:.1f}", font_size=28, color=GREEN),
-            Text("(직선거리)", font_size=18, color=GRAY)
-        ).arrange(DOWN, aligned_edge=LEFT, buff=0.1)
+        straight_eq = VGroup(
+            Text("변위 = 이동거리", font_size=18, color=YELLOW),
+        ).next_to(straight_group, DOWN, buff=0.4)
 
-        distance_info = VGroup(
-            Text("이동거리:", font_size=24, color=ORANGE),
-            Text(f"s = {curved_length:.1f}", font_size=28, color=ORANGE),
-            Text("(경로 길이)", font_size=18, color=GRAY)
-        ).arrange(DOWN, aligned_edge=LEFT, buff=0.1)
+        left_all = VGroup(straight_title, straight_group, straight_eq)
 
-        info_box = VGroup(displacement_info, distance_info).arrange(RIGHT, buff=1.5)
-        info_box.to_edge(DOWN, buff=0.7)
+        # ── 2. 오른쪽: 곡선 케이스 ──
+        RIGHT_CENTER = RIGHT * 3.5
 
-        # 박스 배경
-        box_bg = SurroundingRectangle(info_box, color=WHITE, fill_color=BLACK, fill_opacity=0.8, buff=0.3)
+        curved_a = Dot(RIGHT_CENTER + LEFT * 1.5, color=BLUE, radius=0.1)
+        curved_b = Dot(RIGHT_CENTER + RIGHT * 1.5, color=RED, radius=0.1)
+        curved_arrow = Arrow(
+            curved_a.get_center(), curved_b.get_center(),
+            color=GREEN, buff=0, stroke_width=4,
+            max_tip_length_to_length_ratio=0.12,
+        )
+        curved_path = VMobject(color=ORANGE, stroke_width=3)
+        curved_path.set_points_smoothly([
+            curved_a.get_center(),
+            RIGHT_CENTER + LEFT * 0.5 + UP * 1.2,
+            RIGHT_CENTER + RIGHT * 0.5 + UP * 0.5,
+            curved_b.get_center(),
+        ])
 
+        curved_group = VGroup(curved_a, curved_b, curved_arrow, curved_path)
+        curved_title = Text("곡선 이동", font_size=22, color=WHITE)
+        curved_title.next_to(curved_group, UP, buff=0.4)
+
+        curved_eq = VGroup(
+            Text("이동거리 > 변위", font_size=18, color=YELLOW),
+        ).next_to(curved_group, DOWN, buff=0.4)
+
+        right_all = VGroup(curved_title, curved_group, curved_eq)
+
+        # ── 3. 표시 ──
         self.play(
-            FadeIn(box_bg),
-            Write(displacement_info),
-            Write(distance_info),
-            run_time=2
+            FadeIn(left_all), FadeIn(right_all),
+            run_time=1.5,
         )
         self.wait(1)
 
-        # === 6. 부등호 강조 ===
+        # ── 4. 중앙 구분선 ──
+        divider = DashedLine(UP * 2.5, DOWN * 2.5, color=GRAY, stroke_width=2)
+        self.play(Create(divider), run_time=0.5)
 
-        inequality = Text("이동거리 >= 변위", font_size=36, color=YELLOW)
-        inequality.next_to(box_bg, UP, buff=0.3)
-
-        self.play(Write(inequality))
-        self.wait(0.5)
-
-        # === 7. 핵심 메시지 ===
-
-        # 기존 요소 페이드 아웃
-        self.play(
-            FadeOut(box_bg),
-            FadeOut(displacement_info),
-            FadeOut(distance_info),
-            FadeOut(inequality),
-            FadeOut(moving_dot),
+        # ── 5. 부등식 강조 ──
+        inequality = MathTex(
+            r"\text{이동거리} \geq |\text{변위}|",
+            font_size=36, color=YELLOW,
+            tex_template=TexTemplateLibrary.ctex,
         )
+        # 한글이 MathTex에서 문제가 될 수 있으므로 Text+MathTex 조합으로 변경
+        inequality = VGroup(
+            Text("이동거리", font_size=28, color=ORANGE),
+            MathTex(r"\geq", font_size=36, color=YELLOW),
+            Text("|변위|", font_size=28, color=GREEN),
+        ).arrange(RIGHT, buff=0.2)
+        inequality.to_edge(DOWN, buff=0.8)
+        inequality_bg = SurroundingRectangle(inequality, color=YELLOW, fill_color=BLACK, fill_opacity=0.9, buff=0.2)
 
-        key_message = VGroup(
-            Text("* 변위: 시작점 -> 끝점 직선 (벡터)", font_size=22, color=GREEN),
+        self.play(FadeIn(inequality_bg), Write(inequality))
+        self.wait(2)
+
+    # ═══════════ Phase 4: Outro ═══════════
+
+    def outro(self):
+        summary = VGroup(
+            Text("* 변위: 시작점 → 끝점 직선 (벡터)", font_size=22, color=GREEN),
             Text("* 이동거리: 실제 이동 경로 길이 (스칼라)", font_size=22, color=ORANGE),
             Text("* 이동거리 >= |변위| (등호: 직선 이동일 때만)", font_size=22, color=YELLOW),
         ).arrange(DOWN, buff=0.25, aligned_edge=LEFT)
-        key_message.to_edge(DOWN, buff=0.5)
 
-        final_box = SurroundingRectangle(key_message, color=WHITE, fill_color=BLACK, fill_opacity=0.85, buff=0.25)
-
-        self.play(
-            FadeIn(final_box),
-            Write(key_message),
-            run_time=2
+        summary_bg = SurroundingRectangle(
+            summary, color=WHITE, fill_color=BLACK, fill_opacity=0.9, buff=0.3,
         )
-
-        self.wait(3)
-
-
-class DisplacementVsDistanceSimple(Scene):
-    """간단 버전 - 핵심만"""
-    def construct(self):
-        # 제목
-        title = Text("변위 vs 이동거리", font_size=44).to_edge(UP)
-        self.play(Write(title))
-
-        # 두 점
-        A = LEFT * 4 + DOWN * 0.5
-        B = RIGHT * 4 + DOWN * 0.5
-
-        dot_A = Dot(A, color=BLUE, radius=0.2)
-        dot_B = Dot(B, color=RED, radius=0.2)
-        text_A = Text("시작", font_size=20, color=BLUE).next_to(dot_A, DOWN)
-        text_B = Text("끝", font_size=20, color=RED).next_to(dot_B, DOWN)
-
-        self.play(Create(dot_A), Create(dot_B), Write(text_A), Write(text_B))
-        self.wait(0.5)
-
-        # 변위 (직선 화살표)
-        displacement = Arrow(A, B, color=GREEN, buff=0, stroke_width=6)
-        disp_label = Text("변위 = 8.0", font_size=28, color=GREEN).next_to(displacement, DOWN, buff=0.3)
-
-        self.play(GrowArrow(displacement), run_time=1.5)
-        self.play(Write(disp_label))
-        self.wait(0.5)
-
-        # 곡선 경로
-        path_points = [A, A + RIGHT*2 + UP*2.5, A + RIGHT*5 + UP*1, A + RIGHT*6 + UP*3, B + UP*1, B]
-        curved = VMobject(color=ORANGE, stroke_width=5)
-        curved.set_points_smoothly(path_points)
-
-        curve_length = curved.get_arc_length()
-        curve_label = Text(f"이동거리 = {curve_length:.1f}", font_size=28, color=ORANGE)
-        curve_label.next_to(curved, UP, buff=0.2)
-
-        self.play(Create(curved), run_time=2)
-        self.play(Write(curve_label))
-        self.wait(0.5)
-
-        # 물체 이동
-        obj = Dot(A, color=YELLOW, radius=0.25)
-        trace = TracedPath(obj.get_center, stroke_color=YELLOW, stroke_width=2, stroke_opacity=0.5)
-        self.add(trace)
-
-        self.play(MoveAlongPath(obj, curved), run_time=3)
-        self.wait(0.5)
-
-        # 결론
-        conclusion = VGroup(
-            Text(f"이동거리 ({curve_length:.1f}) > 변위 (8.0)", font_size=30, color=YELLOW),
-        )
-        conclusion.to_edge(DOWN, buff=0.8)
-        bg = SurroundingRectangle(conclusion, color=WHITE, fill_color=BLACK, fill_opacity=0.9, buff=0.2)
-
-        self.play(FadeIn(bg), Write(conclusion))
+        self.play(FadeIn(summary_bg), Write(summary), run_time=2)
         self.wait(2)

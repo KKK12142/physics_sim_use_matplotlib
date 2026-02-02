@@ -1,38 +1,202 @@
-from manim import VGroup
 from manim import *
 import numpy as np
 
 
 class MomentumConservation(Scene):
+    # ── 폰트 크기 ──
+    FONT_TITLE = 80
+    FONT_SUBTITLE = 28
+    FONT_LABEL = 20
+    FONT_AXIS_LABEL = 16
+    FONT_AXIS_NUM = 20
+    FONT_CALC = 36
+    FONT_CALC_RESULT = 40
+    FONT_FORMULA = 28
+
+    # ── 공통 상수 ──
+    TRACK_Y = 1.5
+    OBJ_SIZE_SMALL = 0.45
+    OBJ_SIZE_MEDIUM = 0.55
+    OBJ_SIZE_LARGE = 0.65
+    SCALE_V = 0.5
+    REAL_PER_SIM = 0.8
+    SIM_TOTAL = 6.0
+    BAR_SCALE = 0.5
+    BAR_WIDTH = 0.6
+
     def construct(self):
-        my_template = TexTemplate()
-        my_template.add_to_preamble(r"\usepackage{kotex}")
-
         self.intro()
-        self.play(*[FadeOut(m) for m in self.mobjects])
-        self.wait(0.5)
-
+        self.clear_screen()
         self.phase1_momentum_concept()
-        self.play(*[FadeOut(m) for m in self.mobjects])
-        self.wait(0.5)
-
+        self.clear_screen()
         self.phase2_equal_mass_collision()
-        self.play(*[FadeOut(m) for m in self.mobjects])
-        self.wait(0.5)
-
+        self.clear_screen()
         self.phase3_different_mass_collision()
-        self.play(*[FadeOut(m) for m in self.mobjects])
-        self.wait(0.5)
-
-        self.phase4_inelastic_collision()
-        self.play(*[FadeOut(m) for m in self.mobjects])
-        self.wait(0.5)
-
+        self.clear_screen()
+        self.phase4_three_body_collision()
+        self.clear_screen()
+        self.phase5_inelastic_collision()
+        self.clear_screen()
+        self.summary()
+        self.clear_screen()
         self.outro()
 
-    # =========================================================
-    # Intro
-    # =========================================================
+    def clear_screen(self):
+        self.play(*[FadeOut(m) for m in self.mobjects])
+        self.wait(0.5)
+
+    # ═══════════ 헬퍼 메서드 ═══════════
+
+    def _make_track(self, y_pos=None):
+        """트랙 라인 + 눈금 + 라벨 생성 → dict 반환"""
+        if y_pos is None:
+            y_pos = self.TRACK_Y
+        track = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
+        track.shift(UP * y_pos)
+        tick_marks = VGroup()
+        tick_labels = VGroup()
+        for i in range(13):
+            val = i - 6
+            x_pos = -6 + 12 * (i / 12)
+            tick = Line(UP * 0.1, DOWN * 0.1, color=WHITE, stroke_width=2)
+            tick.move_to([x_pos, track.get_center()[1], 0])
+            tick_marks.add(tick)
+            if i % 3 == 0:
+                label = Text(str(val), font_size=self.FONT_AXIS_LABEL, color=GRAY)
+                label.next_to(tick, DOWN, buff=0.15)
+                tick_labels.add(label)
+        return {"track": track, "ticks": tick_marks, "labels": tick_labels}
+
+    def _make_pt_axes(self, y_range, y_numbers, x_length=5, y_length=3):
+        """p-t 그래프 축 생성 → dict 반환"""
+        axes = Axes(
+            x_range=[0, self.SIM_TOTAL, 1], y_range=y_range,
+            x_length=x_length, y_length=y_length,
+            axis_config={"include_tip": False},
+            x_axis_config={"numbers_to_include": list(range(1, int(self.SIM_TOTAL) + 1))},
+            y_axis_config={"numbers_to_include": y_numbers},
+        )
+        axes.to_corner(DL, buff=0.8)
+        x_lab = Text("t (s)", font_size=self.FONT_AXIS_LABEL + 2).next_to(axes.x_axis, RIGHT, buff=0.15)
+        y_lab = MathTex("p", font_size=24).next_to(axes.y_axis, UP, buff=0.15)
+        return {"axes": axes, "x_lab": x_lab, "y_lab": y_lab}
+
+    def _make_momentum_bars(self, values, colors, labels, bar_origin=None, bar_scale=None):
+        """운동량 막대 차트 → dict 반환"""
+        if bar_origin is None:
+            bar_origin = RIGHT * 3.5 + DOWN * 2.5
+        if bar_scale is None:
+            bar_scale = self.BAR_SCALE
+        bars = VGroup()
+        for val, col in zip(values, colors):
+            h = max(abs(val) * bar_scale, 0.05)
+            bar = Rectangle(width=self.BAR_WIDTH, height=h, color=col, fill_opacity=0.7)
+            bars.add(bar)
+        bars.arrange(RIGHT, buff=0.5, aligned_edge=DOWN)
+        bars.move_to(bar_origin)
+        bars.align_to(bar_origin + DOWN * 0.5, DOWN)
+
+        bar_labels = VGroup()
+        for i, lbl_tex in enumerate(labels):
+            lbl = MathTex(lbl_tex, font_size=22, color=colors[i])
+            lbl.next_to(bars[i], DOWN, buff=0.15)
+            bar_labels.add(lbl)
+
+        # 타이틀은 bar_origin 기준 고정 위치 (스케일 변화에 무관)
+        bar_title = Text("운동량", font_size=self.FONT_LABEL, color=WHITE)
+        bar_title.move_to([bar_origin[0], bar_origin[1] + 2.0, 0]).shift(UP*1)
+
+        val_labels = VGroup()
+        for i, val in enumerate(values):
+            vl = MathTex(str(int(val)) if val == int(val) else f"{val:.1f}",
+                         font_size=24, color=WHITE)
+            vl.next_to(bars[i], UP, buff=0.05)
+            val_labels.add(vl)
+
+        return {"bars": bars, "bar_labels": bar_labels, "bar_title": bar_title,
+                "val_labels": val_labels, "bar_scale": bar_scale}
+
+    def _make_object(self, x, y, size, color, label_text, mass_text):
+        """충돌 물체 + 라벨 + 질량표시 → dict 반환"""
+        box = Square(side_length=size, color=color, fill_opacity=0.8)
+        box.move_to([x, y + size / 2 + 0.1, 0])
+        label = Text(label_text, font_size=self.FONT_LABEL - 4, color=WHITE).move_to(box)
+        mass = MathTex(mass_text, font_size=18, color=color).next_to(box, UP, buff=0.1)
+        return {"box": box, "label": label, "mass": mass}
+
+    def _smooth_step(self, t, t0, width=0.15):
+        """시그모이드 기반 부드러운 전환"""
+        return 1 / (1 + np.exp(-(t - t0) / (width / 4)))
+
+    def _collision_effect(self, point, box_a, box_b, extra_anims=None):
+        """충돌 순간 효과: Flash + squash + 색 번쩍임"""
+        anims = [Flash(point, color=YELLOW, flash_radius=0.5, line_length=0.3)]
+        if extra_anims:
+            anims.extend(extra_anims)
+        self.play(*anims, run_time=0.3)
+        self.play(
+            box_a.animate.scale([1.15, 0.85, 1]),
+            box_b.animate.scale([1.15, 0.85, 1]),
+            run_time=0.1, rate_func=there_and_back
+        )
+
+    def _setup_object_updaters(self, obj_dict, pos_func, time_tracker, y_pos):
+        """물체, 라벨, 질량에 updater 부착"""
+        obj_dict["box"].add_updater(
+            lambda m, pf=pos_func: m.move_to([pf(time_tracker.get_value()), y_pos, 0]))
+        obj_dict["label"].add_updater(lambda m: m.move_to(obj_dict["box"]))
+        obj_dict["mass"].add_updater(lambda m: m.next_to(obj_dict["box"], UP, buff=0.1))
+
+    def _clear_object_updaters(self, *obj_dicts):
+        """여러 물체 dict에서 updater 일괄 해제"""
+        for d in obj_dicts:
+            d["box"].clear_updaters()
+            d["label"].clear_updaters()
+            d["mass"].clear_updaters()
+
+    def _update_bars(self, bar_data, new_values, colors):
+        """막대 차트를 새 값으로 Transform"""
+        scale = bar_data.get("bar_scale", self.BAR_SCALE)
+        anims = []
+        for i, (val, col) in enumerate(zip(new_values, colors)):
+            h = max(abs(val) * scale, 0.05)
+            new_bar = Rectangle(width=self.BAR_WIDTH, height=h, color=col, fill_opacity=0.7)
+            new_bar.move_to(bar_data["bars"][i].get_bottom(), aligned_edge=DOWN)
+            anims.append(Transform(bar_data["bars"][i], new_bar))
+            val_str = str(int(val)) if val == int(val) else f"{val:.1f}"
+            new_vl = MathTex(val_str, font_size=24, color=WHITE)
+            new_vl.next_to(new_bar, UP, buff=0.05)
+            anims.append(Transform(bar_data["val_labels"][i], new_vl))
+        return anims
+
+    def _make_vel_arrow_and_label(self, box, velocity, color, arrow_scale=0.15):
+        """속도에 비례하는 화살표 + 라벨을 생성하는 always_redraw용 VGroup 반환"""
+        vel_abs = abs(velocity)
+        if vel_abs < 0.01:
+            lbl = MathTex(f"v=0", font_size=16, color=color)
+            lbl.next_to(box, RIGHT, buff=0.15)
+            return VGroup(lbl)
+        arrow_len = vel_abs * arrow_scale
+        arrow_len = max(arrow_len, 0.25)
+        if velocity > 0:
+            arrow = Arrow(
+                start=box.get_right(), end=box.get_right() + RIGHT * arrow_len,
+                color=color, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+            vel_str = f"{velocity:.1f}" if velocity != int(velocity) else f"{int(velocity)}"
+            lbl = MathTex(f"v={vel_str}", font_size=16, color=color)
+            lbl.next_to(arrow, UP, buff=0.05)
+            return VGroup(arrow, lbl)
+        else:
+            arrow = Arrow(
+                start=box.get_left(), end=box.get_left() + LEFT * arrow_len,
+                color=color, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+            vel_str = f"{velocity:.1f}" if velocity != int(velocity) else f"{int(velocity)}"
+            lbl = MathTex(f"v={vel_str}", font_size=16, color=color)
+            lbl.next_to(arrow, UP, buff=0.05)
+            return VGroup(arrow, lbl)
+
+    # ═══════════ Phase 0: Intro ═══════════
+
     def intro(self):
         eq = MathTex(r"\vec{p}", "=", "m", r"\vec{v}", font_size=96, color=WHITE)
         eq.move_to(ORIGIN)
@@ -47,43 +211,43 @@ class MomentumConservation(Scene):
         self.play(Write(title), run_time=1.0)
         self.wait(0.75)
 
-        subtitle = Text("외력이 없으면 총 운동량은 변하지 않는다", font_size=28, color=WHITE)
+        subtitle = Text("외력이 없으면 총 운동량은 변하지 않는다",
+                         font_size=self.FONT_SUBTITLE, color=WHITE)
         subtitle.next_to(title, DOWN, buff=0.5)
         self.play(Write(subtitle), run_time=1.0)
         self.wait(1.5)
 
-    # =========================================================
-    # Phase 1: 운동량이란?
-    # =========================================================
+    # ═══════════ Phase 1: 운동량 개념 ═══════════
+
     def phase1_momentum_concept(self):
+        # ── 1. 타이틀 ──
         title = Text("운동량이란?", font_size=40, color=WHITE)
         title.to_edge(UP)
         self.play(Write(title))
         self.wait(0.5)
 
-        # --- 두 개의 트랙 ---
-        track_a = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
-        track_a.shift(UP * 1.5)
-        track_b = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
-        track_b.shift(DOWN * 0.2)
+        # ── 2. 두 트랙 ──
+        TRACK_A_Y = 1.5
+        TRACK_B_Y = -0.2
+        track_a = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3).shift(UP * TRACK_A_Y)
+        track_b = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3).shift(UP * TRACK_B_Y)
 
-        # --- 물체 ---
-        obj_size = 0.45
-        obj_a = Square(side_length=obj_size, color=BLUE, fill_opacity=0.8)
-        obj_a.move_to([-5, track_a.get_center()[1] + obj_size / 2 + 0.1, 0])
-
-        obj_b_size = 0.65
+        # ── 3. 물체 ──
+        obj_a_size = self.OBJ_SIZE_SMALL
+        obj_b_size = self.OBJ_SIZE_LARGE
+        obj_a = Square(side_length=obj_a_size, color=BLUE, fill_opacity=0.8)
+        obj_a.move_to([-5, TRACK_A_Y + obj_a_size / 2 + 0.1, 0])
         obj_b = Square(side_length=obj_b_size, color=RED, fill_opacity=0.8)
-        obj_b.move_to([-5, track_b.get_center()[1] + obj_b_size / 2 + 0.1, 0])
-        mass_a = MathTex("1\\,\\text{kg}", font_size=20, color=BLUE).next_to(obj_a, UP, buff=0.1)
-        mass_b = MathTex("3\\,\\text{kg}", font_size=20, color=RED).next_to(obj_b, UP, buff=0.1)
+        obj_b.move_to([-5, TRACK_B_Y + obj_b_size / 2 + 0.1, 0])
 
-        obj_a_label = Text("A", font_size=20, color=WHITE).move_to(obj_a.get_center())
-        obj_b_label = Text("B", font_size=20, color=WHITE).move_to(obj_b.get_center())
+        mass_a = MathTex("1\\,\\text{kg}", font_size=self.FONT_LABEL, color=BLUE).next_to(obj_a, UP, buff=0.1)
+        mass_b = MathTex("3\\,\\text{kg}", font_size=self.FONT_LABEL, color=RED).next_to(obj_b, UP, buff=0.1)
+        obj_a_label = Text("A", font_size=self.FONT_LABEL, color=WHITE).move_to(obj_a)
+        obj_b_label = Text("B", font_size=self.FONT_LABEL, color=WHITE).move_to(obj_b)
 
         self.play(Create(track_a), Create(track_b), run_time=0.75)
 
-        # 속도 화살표 (always_redraw로 물체 추종)
+        # ── 4. 속도 화살표 ──
         vel_a = always_redraw(lambda: Arrow(
             start=obj_a.get_right(), end=obj_a.get_right() + RIGHT * 0.9,
             color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3
@@ -95,7 +259,6 @@ class MomentumConservation(Scene):
         vel_a_label = MathTex("v=3", font_size=18, color=BLUE).next_to(vel_a, UP, buff=0.05)
         vel_b_label = MathTex("v=3", font_size=18, color=RED).next_to(vel_b, UP, buff=0.05)
 
-        # updater로 라벨/질량 자동 추종
         obj_a_label.add_updater(lambda m: m.move_to(obj_a))
         obj_b_label.add_updater(lambda m: m.move_to(obj_b))
         mass_a.add_updater(lambda m: m.next_to(obj_a, UP, buff=0.1))
@@ -114,12 +277,13 @@ class MomentumConservation(Scene):
             run_time=0.75
         )
 
-        same_v_text = Text("두 물체가 3m/s의 동일한 속력으로 움직인다.", font_size=24, color=WHITE)
+        same_v_text = Text("두 물체가 3m/s의 동일한 속력으로 움직인다.",
+                           font_size=24, color=WHITE)
         same_v_text.move_to(RIGHT * 3 + UP * 0.6)
         self.play(Write(same_v_text), run_time=0.5)
         self.wait(0.5)
 
-        # 이동 애니메이션 (updater가 라벨/화살표 자동 추종)
+        # ── 5. 이동 ──
         self.play(
             obj_a.animate.shift(RIGHT * 5),
             obj_b.animate.shift(RIGHT * 5),
@@ -127,14 +291,13 @@ class MomentumConservation(Scene):
         )
         self.wait(0.5)
 
-        # 운동량 비교
+        # ── 6. 운동량 비교 ──
         self.play(FadeOut(same_v_text), run_time=0.3)
 
-        but_text = Text("하지만 운동량은?", font_size=28, color=YELLOW)
+        but_text = Text("하지만 운동량은?", font_size=self.FONT_SUBTITLE, color=YELLOW)
         but_text.move_to(RIGHT * 3 + UP * 0.6)
         self.play(Write(but_text), run_time=0.75)
 
-        # updater 해제 후 운동량 화살표로 변환
         vel_a_label.clear_updaters()
         vel_b_label.clear_updaters()
         self.remove(vel_a, vel_b, vel_a_label, vel_b_label)
@@ -147,16 +310,15 @@ class MomentumConservation(Scene):
             start=obj_b.get_right(), end=obj_b.get_right() + RIGHT * 1.5,
             color=PURPLE, buff=0, stroke_width=5, max_tip_length_to_length_ratio=0.3
         )
-        p_a_label = MathTex(r"p=3\,\text{kg}\!\cdot\!\text{m/s}", font_size=18, color=PURPLE).next_to(p_a, UP, buff=0.05).shift(RIGHT * 0.45)
-        p_b_label = MathTex(r"p=9\,\text{kg}\!\cdot\!\text{m/s}", font_size=18, color=PURPLE).next_to(p_b, UP, buff=0.05)
+        p_a_label = MathTex(r"p=3\,\text{kg}\!\cdot\!\text{m/s}", font_size=18, color=PURPLE)
+        p_a_label.next_to(p_a, UP, buff=0.05).shift(RIGHT * 0.45)
+        p_b_label = MathTex(r"p=9\,\text{kg}\!\cdot\!\text{m/s}", font_size=18, color=PURPLE)
+        p_b_label.next_to(p_b, UP, buff=0.05)
 
-        self.play(
-            FadeIn(p_a), FadeIn(p_b), Write(p_a_label), Write(p_b_label),
-            run_time=1.0
-        )
+        self.play(FadeIn(p_a), FadeIn(p_b), Write(p_a_label), Write(p_b_label), run_time=1.0)
         self.wait(0.5)
 
-        # 수식 정리 (좌하단)
+        # ── 7. 수식 정리 ──
         info = VGroup(
             MathTex(r"p_A = 1 \times 3 = 3\,\text{kg}\!\cdot\!\text{m/s}", font_size=24, color=BLUE),
             MathTex(r"p_B = 3 \times 3 = 9\,\text{kg}\!\cdot\!\text{m/s}", font_size=24, color=RED),
@@ -176,686 +338,833 @@ class MomentumConservation(Scene):
         self.play(Write(p_eq), Create(p_box), run_time=1.0)
         self.wait(1.5)
 
-    # =========================================================
-    # Phase 2: 같은 질량 완전 탄성 충돌
-    # =========================================================
+    # ═══════════ Phase 2: 같은 질량 완전 탄성 충돌 ═══════════
+
     def phase2_equal_mass_collision(self):
+        # ── 1. 타이틀 ──
         title = VGroup(
             Text("실험 A: 같은 질량 완전 탄성 충돌", font_size=30, color=WHITE),
-            MathTex(r"(m = 1kg, v_A = 4m/s, v_B = 0)", font_size=30, color=WHITE)
-        )
-        title.arrange(RIGHT, buff=0.3, aligned_edge=UP)
+            MathTex(r"(m = 1\text{kg},\; v_A = 4\text{m/s},\; v_B = 0)", font_size=self.FONT_SUBTITLE, color=WHITE)
+        ).arrange(RIGHT, buff=0.3, aligned_edge=UP)
         title.to_edge(UP)
         self.play(Write(title))
         self.wait(0.5)
 
-        # --- Track ---
-        track = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
-        track.shift(UP * 1.5)
-        tick_marks = VGroup()
-        tick_labels = VGroup()
-        for i in range(13):
-            val = i - 6
-            x_pos = -6 + 12 * (i / 12)
-            tick = Line(UP * 0.1, DOWN * 0.1, color=WHITE, stroke_width=2)
-            tick.move_to([x_pos, track.get_center()[1], 0])
-            tick_marks.add(tick)
-            if i % 3 == 0:
-                label = Text(str(val), font_size=16, color=GRAY)
-                label.next_to(tick, DOWN, buff=0.15)
-                tick_labels.add(label)
-        self.play(Create(track), run_time=0.5)
-        self.play(Create(tick_marks), Write(tick_labels), run_time=0.5)
+        # ── 2. 트랙 ──
+        track_data = self._make_track()
+        self.play(Create(track_data["track"]), run_time=0.5)
+        self.play(Create(track_data["ticks"]), Write(track_data["labels"]), run_time=0.5)
+        center_y = track_data["track"].get_center()[1]
 
-        # --- p-t 그래프 ---
-        sim_total = 6.0
-        axes_pt = Axes(
-            x_range=[0, sim_total, 1], y_range=[-1, 6, 1],
-            x_length=5, y_length=3,
-            axis_config={"include_tip": False},
-            x_axis_config={"numbers_to_include": [1, 2, 3, 4, 5, 6]},
-            y_axis_config={"numbers_to_include": [0, 2, 4]},
-        )
-        axes_pt.to_corner(DL, buff=0.8)
-        x_lab = Text("t (s)", font_size=18).next_to(axes_pt.x_axis, RIGHT, buff=0.15)
-        y_lab = MathTex("p", font_size=24).next_to(axes_pt.y_axis, UP, buff=0.15)
-        self.play(Create(axes_pt), Write(x_lab), Write(y_lab), run_time=0.75)
+        # ── 3. p-t 그래프 ──
+        pt_data = self._make_pt_axes(y_range=[-1, 6, 1], y_numbers=[0, 2, 4])
+        axes_pt = pt_data["axes"]
+        self.play(Create(axes_pt), Write(pt_data["x_lab"]), Write(pt_data["y_lab"]), run_time=0.75)
 
-        # --- 운동량 막대 ---
-        bar_origin = RIGHT * 3.5 + DOWN * 2.5
-        bar_scale = 0.5
-        bar_width = 0.6
-        bar_a = Rectangle(width=bar_width, height=4 * bar_scale, color=BLUE, fill_opacity=0.7)
-        bar_b = Rectangle(width=bar_width, height=0.05, color=RED, fill_opacity=0.7)
-        bar_tot = Rectangle(width=bar_width, height=4 * bar_scale, color=YELLOW, fill_opacity=0.7)
-        bars = VGroup(bar_a, bar_b, bar_tot)
-        bars.arrange(RIGHT, buff=0.5, aligned_edge=DOWN)
-        bars.move_to(bar_origin)
-        bars.align_to(bar_origin + DOWN * 0.5, DOWN)
-        bar_labels_text = VGroup(
-            MathTex("p_A", font_size=22, color=BLUE),
-            MathTex("p_B", font_size=22, color=RED),
-            MathTex("p_{tot}", font_size=22, color=YELLOW),
-        )
-        for i, lbl in enumerate(bar_labels_text):
-            lbl.next_to(bars[i], DOWN, buff=0.15)
-        bar_title = Text("운동량", font_size=20, color=WHITE).next_to(bars, UP, buff=0.5)
-        bar_val_a = MathTex("4", font_size=18, color=WHITE).next_to(bar_a, UP, buff=0.05)
-        bar_val_b = MathTex("0", font_size=18, color=WHITE).next_to(bar_b, UP, buff=0.05)
-        bar_val_tot = MathTex("4", font_size=18, color=WHITE).next_to(bar_tot, UP, buff=0.05)
+        # ── 4. 운동량 막대 ──
+        bar_data = self._make_momentum_bars(
+            values=[4, 0, 4], colors=[BLUE, RED, YELLOW],
+            labels=["p_A", "p_B", "p_{tot}"], bar_scale=0.35)
         self.play(
-            FadeIn(bars), Write(bar_labels_text), Write(bar_title),
-            Write(bar_val_a), Write(bar_val_b), Write(bar_val_tot),
+            FadeIn(bar_data["bars"]), Write(bar_data["bar_labels"]),
+            Write(bar_data["bar_title"]), Write(bar_data["val_labels"]),
             run_time=0.75
         )
 
-        # --- 물체 ---
-        obj_size = 0.45
-        center_y = track.get_center()[1]
-        box_a = Square(side_length=obj_size, color=BLUE, fill_opacity=0.8)
-        box_b = Square(side_length=obj_size, color=RED, fill_opacity=0.8)
-        start_a_x, start_b_x = -4.0, 0.0
-        box_a.move_to([start_a_x, center_y + obj_size / 2 + 0.1, 0])
-        box_b.move_to([start_b_x, center_y + obj_size / 2 + 0.1, 0])
-
-        label_a = Text("A", font_size=16, color=WHITE).move_to(box_a)
-        label_b = Text("B", font_size=16, color=WHITE).move_to(box_b)
-        mass_a = MathTex("1\\,\\text{kg}", font_size=18, color=BLUE).next_to(box_a, UP, buff=0.1)
-        mass_b = MathTex("1\\,\\text{kg}", font_size=18, color=RED).next_to(box_b, UP, buff=0.1)
+        # ── 5. 물체 ──
+        START_A_X, START_B_X = -4.0, 0.0
+        obj_a = self._make_object(START_A_X, center_y, self.OBJ_SIZE_SMALL, BLUE, "A", "1\\,\\text{kg}")
+        obj_b = self._make_object(START_B_X, center_y, self.OBJ_SIZE_SMALL, RED, "B", "1\\,\\text{kg}")
         vel_arrow = Arrow(
-            start=box_a.get_right(), end=box_a.get_right() + RIGHT * 0.8,
-            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        )
-        vel_label = MathTex("v=4", font_size=18, color=BLUE).next_to(vel_arrow, UP, buff=0.05)
+            start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 0.8,
+            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+        TRACK_BOTTOM_Y = center_y - 0.15
+        vel_label = MathTex("v=4", font_size=20, color=BLUE)
+        vel_label.move_to([obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
         self.play(
-            FadeIn(box_a), FadeIn(box_b), Write(label_a), Write(label_b),
-            Write(mass_a), Write(mass_b), Create(vel_arrow), Write(vel_label),
+            FadeIn(obj_a["box"]), FadeIn(obj_b["box"]),
+            Write(obj_a["label"]), Write(obj_b["label"]),
+            Write(obj_a["mass"]), Write(obj_b["mass"]),
+            Create(vel_arrow), Write(vel_label),
             run_time=0.75
         )
         self.wait(0.3)
 
-        # --- 충돌 시뮬레이션 (ValueTracker) ---
-        # 물리: m1=m2=1, v_a=4, v_b=0 → 충돌 후 v_a'=0, v_b'=4
-        scale_v = 0.5  # 물리 속도 → 화면 속도
-        v_a_phys, v_b_phys = 4.0, 0.0
-        v_a_after, v_b_after = 0.0, 4.0
+        # ── 6. 충돌 시뮬레이션 ──
+        V_A, V_B = 4.0, 0.0
+        V_A_AFTER, V_B_AFTER = 0.0, 4.0
+        obj_size = self.OBJ_SIZE_SMALL
 
-        # 충돌 시간: A 오른쪽 가장자리가 B 왼쪽 가장자리에 닿는 시점
-        dist = (start_b_x - obj_size / 2) - (start_a_x + obj_size / 2)
-        collision_t = dist / (v_a_phys * scale_v)  # 화면 시간
-
+        dist = (START_B_X - obj_size / 2) - (START_A_X + obj_size / 2)
+        collision_t = dist / (V_A * self.SCALE_V)
         time_tracker = ValueTracker(0)
 
         def pos_a(t):
             if t <= collision_t:
-                return start_a_x + v_a_phys * scale_v * t
-            return start_a_x + v_a_phys * scale_v * collision_t + v_a_after * scale_v * (t - collision_t)
+                return START_A_X + V_A * self.SCALE_V * t
+            return START_A_X + V_A * self.SCALE_V * collision_t + V_A_AFTER * self.SCALE_V * (t - collision_t)
 
         def pos_b(t):
             if t <= collision_t:
-                return start_b_x
-            return start_b_x + v_b_after * scale_v * (t - collision_t)
+                return START_B_X
+            return START_B_X + V_B_AFTER * self.SCALE_V * (t - collision_t)
 
         y_a = center_y + obj_size / 2 + 0.1
-        y_b = center_y + obj_size / 2 + 0.1
+        self._setup_object_updaters(obj_a, pos_a, time_tracker, y_a)
+        self._setup_object_updaters(obj_b, pos_b, time_tracker, y_a)
 
-        box_a.add_updater(lambda m: m.move_to([pos_a(time_tracker.get_value()), y_a, 0]))
-        box_b.add_updater(lambda m: m.move_to([pos_b(time_tracker.get_value()), y_b, 0]))
-        label_a.add_updater(lambda m: m.move_to(box_a))
-        label_b.add_updater(lambda m: m.move_to(box_b))
-        mass_a.add_updater(lambda m: m.next_to(box_a, UP, buff=0.1))
-        mass_b.add_updater(lambda m: m.next_to(box_b, UP, buff=0.1))
-
-        # 동적 속도 화살표
         vel_arrow_dyn = always_redraw(lambda: Arrow(
-            start=box_a.get_right(), end=box_a.get_right() + RIGHT * 0.8,
+            start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 0.8,
             color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
         ) if time_tracker.get_value() < collision_t else VMobject())
+        vel_label_a_dyn = always_redraw(lambda: MathTex(
+            "v=4", font_size=20, color=BLUE
+        ).move_to([obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        if time_tracker.get_value() < collision_t else VMobject())
+
         vel_arrow_b_dyn = always_redraw(lambda: Arrow(
-            start=box_b.get_right(), end=box_b.get_right() + RIGHT * 0.8,
+            start=obj_b["box"].get_right(), end=obj_b["box"].get_right() + RIGHT * 0.8,
             color=RED, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        ) if time_tracker.get_value() > collision_t else VMobject())
+        ) if time_tracker.get_value() > collision_t + 0.2 else VMobject())
+        vel_label_b_dyn = always_redraw(lambda: MathTex(
+            "v=4", font_size=20, color=RED
+        ).move_to([obj_b["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        if time_tracker.get_value() > collision_t + 0.2 else VMobject())
 
         self.remove(vel_arrow)
-        self.add(vel_arrow_dyn, vel_arrow_b_dyn)
+        self.add(vel_arrow_dyn, vel_label_a_dyn, vel_arrow_b_dyn, vel_label_b_dyn)
 
-        # p-t 그래프 (smooth)
-        def smooth_step(t, t0, width=0.15):
-            return 1 / (1 + np.exp(-(t - t0) / (width / 4)))
-
+        # p-t 그래프
         def p_a_func(t):
-            s = smooth_step(t, collision_t)
+            s = self._smooth_step(t, collision_t)
             return 4 * (1 - s)
 
         def p_b_func(t):
-            s = smooth_step(t, collision_t)
+            s = self._smooth_step(t, collision_t)
             return 4 * s
 
         pt_line_a = always_redraw(lambda: axes_pt.plot(
-            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
+            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
             color=BLUE, stroke_width=3
         ) if time_tracker.get_value() > 0.01 else VMobject())
         pt_line_b = always_redraw(lambda: axes_pt.plot(
-            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
+            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
             color=RED, stroke_width=3
         ) if time_tracker.get_value() > 0.01 else VMobject())
         pt_line_tot = always_redraw(lambda: axes_pt.plot(
-            lambda t: 4, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=YELLOW, stroke_width=3, stroke_opacity=0.7
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        self.add(pt_line_a, pt_line_b, pt_line_tot)
-
-        # 충돌 전 이동 (run_time을 시뮬레이션 시간에 비례)
-        real_per_sim = 0.8  # 1 sim초 = 0.8 real초
-        self.play(FadeOut(vel_label), run_time=0.3)
-        self.play(time_tracker.animate.set_value(collision_t), run_time=collision_t * real_per_sim, rate_func=linear)
-
-        # 충돌 Flash + 막대 업데이트 동시
-        collision_point = box_a.get_right()
-        new_bar_a = Rectangle(width=bar_width, height=0.05, color=BLUE, fill_opacity=0.7)
-        new_bar_b = Rectangle(width=bar_width, height=4 * bar_scale, color=RED, fill_opacity=0.7)
-        new_bar_a.move_to(bar_a.get_bottom(), aligned_edge=DOWN)
-        new_bar_b.move_to(bar_b.get_bottom(), aligned_edge=DOWN)
-        new_val_a = MathTex("0", font_size=18, color=WHITE).next_to(new_bar_a, UP, buff=0.05)
-        new_val_b = MathTex("4", font_size=18, color=WHITE).next_to(new_bar_b, UP, buff=0.05)
-        self.play(
-            Flash(collision_point, color=YELLOW, flash_radius=0.5, line_length=0.3),
-            Transform(bar_a, new_bar_a), Transform(bar_b, new_bar_b),
-            Transform(bar_val_a, new_val_a), Transform(bar_val_b, new_val_b),
-            run_time=0.5
-        )
-
-        # 충돌 후 이동 (같은 비율)
-        self.play(time_tracker.animate.set_value(sim_total), run_time=(sim_total - collision_t) * real_per_sim, rate_func=linear)
-
-        # 정리
-        box_a.clear_updaters()
-        box_b.clear_updaters()
-        label_a.clear_updaters()
-        label_b.clear_updaters()
-        mass_a.clear_updaters()
-        mass_b.clear_updaters()
-        self.remove(vel_arrow_dyn, vel_arrow_b_dyn, pt_line_a, pt_line_b, pt_line_tot)
-
-        # 정적 그래프
-        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, sim_total], color=BLUE, stroke_width=3)
-        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, sim_total], color=RED, stroke_width=3)
-        final_pt_tot = axes_pt.plot(lambda t: 4, x_range=[0, sim_total], color=YELLOW, stroke_width=3, stroke_opacity=0.7)
-        self.add(final_pt_a, final_pt_b, final_pt_tot)
-
-        pt_lbl_a = Text("A의 운동량", font_size=14, color=BLUE).next_to(axes_pt.c2p(sim_total, 0), RIGHT, buff=0.15)
-        pt_lbl_b = Text("B의 운동량", font_size=14, color=RED).next_to(axes_pt.c2p(sim_total, 4), RIGHT, buff=0.15)
-        pt_lbl_tot = Text("총 운동량", font_size=14, color=YELLOW).next_to(axes_pt.c2p(0, 4), RIGHT, buff=0.15).shift(UP * 0.3)
-        self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_tot), run_time=0.5)
-
-        conclusion = MathTex(r"p_1 + p_2 = p_1' + p_2'", font_size=36, color=YELLOW)
-        conclusion.next_to(title, DOWN, buff=0.3)
-        self.play(Write(conclusion), run_time=1.0)
-        self.wait(2.0)
-
-    # =========================================================
-    # Phase 3: 다른 질량 완전 탄성 충돌
-    # =========================================================
-    def phase3_different_mass_collision(self):
-        title = VGroup(
-            Text("실험 B: 다른 질량 탄성 충돌", font_size=30, color=WHITE),
-            MathTex(r"(m_A = 1kg, v_A = 6m/s, m_B = 2kg, v_B = 0)", font_size=30, color=WHITE)
-        )
-        title.arrange(RIGHT, buff=0.3, aligned_edge=UP)
-        title.to_edge(UP)
-        self.play(Write(title))
-        self.wait(0.5)
-
-        # --- Track ---
-        track = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
-        track.shift(UP * 1.5)
-        tick_marks = VGroup()
-        tick_labels = VGroup()
-        for i in range(13):
-            val = i - 6
-            x_pos = -6 + 12 * (i / 12)
-            tick = Line(UP * 0.1, DOWN * 0.1, color=WHITE, stroke_width=2)
-            tick.move_to([x_pos, track.get_center()[1], 0])
-            tick_marks.add(tick)
-            if i % 3 == 0:
-                label = Text(str(val), font_size=16, color=GRAY)
-                label.next_to(tick, DOWN, buff=0.15)
-                tick_labels.add(label)
-        self.play(Create(track), Create(tick_marks), Write(tick_labels), run_time=0.75)
-
-        # --- p-t 그래프 ---
-        sim_total = 6.0
-        axes_pt = Axes(
-            x_range=[0, sim_total, 1], y_range=[-4, 10, 2],
-            x_length=5, y_length=3.5,
-            axis_config={"include_tip": False},
-            x_axis_config={"numbers_to_include": [1, 2, 3, 4, 5, 6]},
-            y_axis_config={"numbers_to_include": [-2, 0, 2, 4, 6, 8]},
-        )
-        axes_pt.to_corner(DL, buff=0.8)
-        x_lab = Text("t (s)", font_size=18).next_to(axes_pt.x_axis, RIGHT, buff=0.15)
-        y_lab = MathTex("p", font_size=24).next_to(axes_pt.y_axis, UP, buff=0.15)
-        self.play(Create(axes_pt), Write(x_lab), Write(y_lab), run_time=0.75)
-
-        info_origin = RIGHT * 1.5 + DOWN * 1.5
-
-        # --- 물체 ---
-        obj_a_size = 0.4
-        obj_b_size = 0.55
-        center_y = track.get_center()[1]
-        start_a_x, start_b_x = -4.0, 0.0
-
-        box_a = Square(side_length=obj_a_size, color=BLUE, fill_opacity=0.8)
-        box_b = Square(side_length=obj_b_size, color=RED, fill_opacity=0.8)
-        box_a.move_to([start_a_x, center_y + obj_a_size / 2 + 0.1, 0])
-        box_b.move_to([start_b_x, center_y + obj_b_size / 2 + 0.1, 0])
-
-        label_a = Text("A", font_size=16, color=WHITE).move_to(box_a)
-        label_b = Text("B", font_size=16, color=WHITE).move_to(box_b)
-        mass_a = MathTex("1\\,\\text{kg}", font_size=18, color=BLUE).next_to(box_a, UP, buff=0.1)
-        mass_b = MathTex("2\\,\\text{kg}", font_size=18, color=RED).next_to(box_b, UP, buff=0.1)
-        vel_arrow = Arrow(
-            start=box_a.get_right(), end=box_a.get_right() + RIGHT * 1.0,
-            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        )
-        vel_label = MathTex("v=6", font_size=18, color=BLUE).next_to(vel_arrow, UP, buff=0.05)
-        self.play(
-            FadeIn(box_a), FadeIn(box_b), Write(label_a), Write(label_b),
-            Write(mass_a), Write(mass_b), Create(vel_arrow), Write(vel_label),
-            run_time=0.75
-        )
-        self.wait(0.3)
-
-        # --- 충돌 시뮬레이션 (ValueTracker) ---
-        # v_A' = (1-2)/(1+2)*6 = -2, v_B' = 2*1/(1+2)*6 = 4
-        scale_v = 0.35
-        v_a_phys, v_b_phys = 6.0, 0.0
-        v_a_after, v_b_after = -2.0, 4.0
-
-        dist = (start_b_x - obj_b_size / 2) - (start_a_x + obj_a_size / 2)
-        collision_t = dist / (v_a_phys * scale_v)
-
-        time_tracker = ValueTracker(0)
-
-        def pos_a(t):
-            if t <= collision_t:
-                return start_a_x + v_a_phys * scale_v * t
-            return start_a_x + v_a_phys * scale_v * collision_t + v_a_after * scale_v * (t - collision_t)
-
-        def pos_b(t):
-            if t <= collision_t:
-                return start_b_x
-            return start_b_x + v_b_after * scale_v * (t - collision_t)
-
-        y_a = center_y + obj_a_size / 2 + 0.1
-        y_b = center_y + obj_b_size / 2 + 0.1
-
-        box_a.add_updater(lambda m: m.move_to([pos_a(time_tracker.get_value()), y_a, 0]))
-        box_b.add_updater(lambda m: m.move_to([pos_b(time_tracker.get_value()), y_b, 0]))
-        label_a.add_updater(lambda m: m.move_to(box_a))
-        label_b.add_updater(lambda m: m.move_to(box_b))
-        mass_a.add_updater(lambda m: m.next_to(box_a, UP, buff=0.1))
-        mass_b.add_updater(lambda m: m.next_to(box_b, UP, buff=0.1))
-
-        # 동적 속도 화살표
-        vel_arrow_a_dyn = always_redraw(lambda: (
-            Arrow(
-                start=box_a.get_right(), end=box_a.get_right() + RIGHT * 1.0,
-                color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-            ) if time_tracker.get_value() < collision_t else (
-                Arrow(
-                    start=box_a.get_left(), end=box_a.get_left() + LEFT * 0.4,
-                    color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-                ) if time_tracker.get_value() > collision_t else VMobject()
-            )
-        ))
-        vel_arrow_b_dyn = always_redraw(lambda: Arrow(
-            start=box_b.get_right(), end=box_b.get_right() + RIGHT * 0.7,
-            color=RED, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        ) if time_tracker.get_value() > collision_t else VMobject())
-
-        self.remove(vel_arrow)
-        self.add(vel_arrow_a_dyn, vel_arrow_b_dyn)
-
-        # p-t 그래프 (smooth)
-        def smooth_step(t, t0, width=0.15):
-            return 1 / (1 + np.exp(-(t - t0) / (width / 4)))
-
-        def p_a_func(t):
-            s = smooth_step(t, collision_t)
-            return 6 * (1 - s) + (-2) * s
-
-        def p_b_func(t):
-            s = smooth_step(t, collision_t)
-            return 8 * s
-
-        pt_line_a = always_redraw(lambda: axes_pt.plot(
-            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=BLUE, stroke_width=3
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        pt_line_b = always_redraw(lambda: axes_pt.plot(
-            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=RED, stroke_width=3
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        pt_line_tot = always_redraw(lambda: axes_pt.plot(
-            lambda t: 6, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=YELLOW, stroke_width=3, stroke_opacity=0.7
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        self.add(pt_line_a, pt_line_b, pt_line_tot)
-
-        # 충돌 전 (run_time을 시뮬레이션 시간에 비례)
-        real_per_sim = 0.8
-        self.play(FadeOut(vel_label), run_time=0.3)
-        self.play(time_tracker.animate.set_value(collision_t), run_time=collision_t * real_per_sim, rate_func=linear)
-
-        # 충돌 Flash
-        collision_point = box_a.get_right()
-        self.play(Flash(collision_point, color=YELLOW, flash_radius=0.5, line_length=0.3, run_time=0.3))
-
-        # 충돌 후 (같은 비율)
-        self.play(time_tracker.animate.set_value(sim_total), run_time=(sim_total - collision_t) * real_per_sim, rate_func=linear)
-
-        # 정리
-        box_a.clear_updaters()
-        box_b.clear_updaters()
-        label_a.clear_updaters()
-        label_b.clear_updaters()
-        mass_a.clear_updaters()
-        mass_b.clear_updaters()
-        self.remove(vel_arrow_a_dyn, vel_arrow_b_dyn, pt_line_a, pt_line_b, pt_line_tot)
-
-        # 정적 그래프
-        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, sim_total], color=BLUE, stroke_width=3)
-        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, sim_total], color=RED, stroke_width=3)
-        final_pt_tot = axes_pt.plot(lambda t: 6, x_range=[0, sim_total], color=YELLOW, stroke_width=3, stroke_opacity=0.7)
-        self.add(final_pt_a, final_pt_b, final_pt_tot)
-
-        pt_lbl_a = Text("A의 운동량", font_size=14, color=BLUE).next_to(axes_pt.c2p(sim_total, -2), RIGHT, buff=0.15)
-        pt_lbl_b = Text("B의 운동량", font_size=14, color=RED).next_to(axes_pt.c2p(sim_total, 8), RIGHT, buff=0.15)
-        pt_lbl_tot = Text("총 운동량", font_size=14, color=YELLOW).next_to(axes_pt.c2p(0, 6), RIGHT, buff=0.15).shift(UP * 0.3)
-        self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_tot), run_time=0.5)
-
-        # 수식 검증
-        before_collision = VGroup(
-            Text("충돌 전 운동량", font_size=22, color=YELLOW),
-            MathTex(r"p_A = 1 \times (6) = 6", font_size=22, color=BLUE),
-            MathTex(r"p_B = 2 \times 0 = 0", font_size=22, color=RED),
-            MathTex(r"p_{tot} = 6 + 0 = 6\;\checkmark", font_size=24, color=YELLOW),
-        )
-        after_collision = VGroup(
-            Text("충돌 후 운동량", font_size=22, color=YELLOW),
-            MathTex(r"p_A' = 1 \times (-2) = -2", font_size=22, color=BLUE),
-            MathTex(r"p_B' = 2 \times 4 = 8", font_size=22, color=RED),
-            MathTex(r"p_{tot}' = -2 + 8 = 6\;\checkmark", font_size=24, color=YELLOW),
-        )
-
-        before_collision.arrange(DOWN, buff=0.25, aligned_edge=LEFT)
-        before_collision.move_to(info_origin)
-        for v in before_collision:
-            self.play(Write(v), run_time=0.5)
-
-        self.wait(1.0)
-
-        after_collision.arrange(DOWN, buff=0.25, aligned_edge=LEFT)
-        after_collision.move_to(info_origin + RIGHT * 3)
-        for v in after_collision:
-            self.play(Write(v), run_time=0.5)
-
-
-
-        self.wait(2.0)
-
-    # =========================================================
-    # Phase 4: 완전 비탄성 충돌
-    # =========================================================
-    def phase4_inelastic_collision(self):
-        title = VGroup(
-            Text("실험 C: 완전 비탄성 충돌", font_size=30, color=WHITE),
-            MathTex(r"(m_A = 1kg, v_A = 4m/s, m_B = 1kg, v_B = 0)", font_size=30, color=WHITE)
-        )
-        title.arrange(RIGHT, buff=0.3, aligned_edge=UP)
-        title.to_edge(UP)
-        self.play(Write(title))
-        self.wait(0.5)
-
-        # --- Track ---
-        track = Line(LEFT * 6, RIGHT * 6, color=WHITE, stroke_width=3)
-        track.shift(UP * 1.5)
-        tick_marks = VGroup()
-        tick_labels = VGroup()
-        for i in range(13):
-            val = i - 6
-            x_pos = -6 + 12 * (i / 12)
-            tick = Line(UP * 0.1, DOWN * 0.1, color=WHITE, stroke_width=2)
-            tick.move_to([x_pos, track.get_center()[1], 0])
-            tick_marks.add(tick)
-            if i % 3 == 0:
-                label = Text(str(val), font_size=16, color=GRAY)
-                label.next_to(tick, DOWN, buff=0.15)
-                tick_labels.add(label)
-        self.play(Create(track), Create(tick_marks), Write(tick_labels), run_time=0.75)
-
-        # --- p-t 그래프 ---
-        sim_total = 6.0
-        axes_pt = Axes(
-            x_range=[0, sim_total, 1], y_range=[-1, 6, 1],
-            x_length=5, y_length=3,
-            axis_config={"include_tip": False},
-            x_axis_config={"numbers_to_include": [1, 2, 3, 4, 5, 6]},
-            y_axis_config={"numbers_to_include": [0, 2, 4]},
-        )
-        axes_pt.to_corner(DL, buff=0.8)
-        x_lab = Text("t (s)", font_size=18).next_to(axes_pt.x_axis, RIGHT, buff=0.15)
-        y_lab = MathTex("p", font_size=24).next_to(axes_pt.y_axis, UP, buff=0.15)
-        self.play(Create(axes_pt), Write(x_lab), Write(y_lab), run_time=0.75)
-
-        # --- 운동량 막대 ---
-        bar_origin = RIGHT * 3.5 + DOWN * 2.5
-        bar_scale = 0.5
-        bar_width = 0.6
-        bar_a = Rectangle(width=bar_width, height=4 * bar_scale, color=BLUE, fill_opacity=0.7)
-        bar_b = Rectangle(width=bar_width, height=0.05, color=RED, fill_opacity=0.7)
-        bar_tot = Rectangle(width=bar_width, height=4 * bar_scale, color=YELLOW, fill_opacity=0.7)
-        bars = VGroup(bar_a, bar_b, bar_tot)
-        bars.arrange(RIGHT, buff=0.5, aligned_edge=DOWN)
-        bars.move_to(bar_origin)
-        bars.align_to(bar_origin + DOWN * 0.5, DOWN)
-        bar_labels_text = VGroup(
-            MathTex("p_A", font_size=22, color=BLUE),
-            MathTex("p_B", font_size=22, color=RED),
-            MathTex("p_{tot}", font_size=22, color=YELLOW),
-        )
-        for i, lbl in enumerate(bar_labels_text):
-            lbl.next_to(bars[i], DOWN, buff=0.15)
-        bar_title = Text("운동량", font_size=20, color=WHITE).next_to(bars, UP, buff=0.5)
-        bar_val_a = MathTex("4", font_size=18, color=WHITE).next_to(bar_a, UP, buff=0.05)
-        bar_val_b = MathTex("0", font_size=18, color=WHITE).next_to(bar_b, UP, buff=0.05)
-        bar_val_tot = MathTex("4", font_size=18, color=WHITE).next_to(bar_tot, UP, buff=0.05)
-        self.play(
-            FadeIn(bars), Write(bar_labels_text), Write(bar_title),
-            Write(bar_val_a), Write(bar_val_b), Write(bar_val_tot),
-            run_time=0.75
-        )
-
-        # --- 물체 ---
-        obj_size = 0.45
-        center_y = track.get_center()[1]
-        start_a_x, start_b_x = -4.0, 0.0
-
-        box_a = Square(side_length=obj_size, color=BLUE, fill_opacity=0.8)
-        box_b = Square(side_length=obj_size, color=RED, fill_opacity=0.8)
-        box_a.move_to([start_a_x, center_y + obj_size / 2 + 0.1, 0])
-        box_b.move_to([start_b_x, center_y + obj_size / 2 + 0.1, 0])
-
-        label_a = Text("A", font_size=16, color=WHITE).move_to(box_a)
-        label_b = Text("B", font_size=16, color=WHITE).move_to(box_b)
-        mass_a = MathTex("1\\,\\text{kg}", font_size=18, color=BLUE).next_to(box_a, UP, buff=0.1)
-        mass_b = MathTex("1\\,\\text{kg}", font_size=18, color=RED).next_to(box_b, UP, buff=0.1)
-        vel_arrow = Arrow(
-            start=box_a.get_right(), end=box_a.get_right() + RIGHT * 0.8,
-            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        )
-        vel_label = MathTex("v=4", font_size=18, color=BLUE).next_to(vel_arrow, UP, buff=0.05)
-        self.play(
-            FadeIn(box_a), FadeIn(box_b), Write(label_a), Write(label_b),
-            Write(mass_a), Write(mass_b), Create(vel_arrow), Write(vel_label),
-            run_time=0.75
-        )
-        self.wait(0.3)
-
-        # --- ValueTracker 기반 시뮬레이션 ---
-        # 비탄성: v' = (1*4)/(1+1) = 2, 합체 후 둘 다 v=2
-        scale_v = 0.5
-        v_before = 4.0
-        v_after = 2.0
-
-        dist = (start_b_x - obj_size / 2) - (start_a_x + obj_size / 2)
-        collision_t = dist / (v_before * scale_v)
-
-        time_tracker = ValueTracker(0)
-
-        def pos_a(t):
-            if t <= collision_t:
-                return start_a_x + v_before * scale_v * t
-            return start_a_x + v_before * scale_v * collision_t + v_after * scale_v * (t - collision_t)
-
-        def pos_b(t):
-            if t <= collision_t:
-                return start_b_x
-            return start_b_x + v_after * scale_v * (t - collision_t)
-
-        y_pos = center_y + obj_size / 2 + 0.1
-
-        box_a.add_updater(lambda m: m.move_to([pos_a(time_tracker.get_value()), y_pos, 0]))
-        box_b.add_updater(lambda m: m.move_to([pos_b(time_tracker.get_value()), y_pos, 0]))
-        label_a.add_updater(lambda m: m.move_to(box_a))
-        label_b.add_updater(lambda m: m.move_to(box_b))
-        mass_a.add_updater(lambda m: m.next_to(box_a, UP, buff=0.1))
-        mass_b.add_updater(lambda m: m.next_to(box_b, UP, buff=0.1))
-
-        vel_dyn = always_redraw(lambda: Arrow(
-            start=box_a.get_right(), end=box_a.get_right() + RIGHT * 0.8,
-            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
-        ) if time_tracker.get_value() < collision_t else VMobject())
-
-        self.remove(vel_arrow)
-        self.add(vel_dyn)
-
-        # p-t 그래프 (smooth) — 비탄성: p_A: 4→2, p_B: 0→2, total=4
-        def smooth_step(t, t0, width=0.15):
-            return 1 / (1 + np.exp(-(t - t0) / (width / 4)))
-
-        def p_a_func(t):
-            s = smooth_step(t, collision_t)
-            return 4 * (1 - s) + 2 * s  # 4 → 2
-
-        def p_b_func(t):
-            s = smooth_step(t, collision_t)
-            return 2 * s  # 0 → 2
-
-        pt_line_a = always_redraw(lambda: axes_pt.plot(
-            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=BLUE, stroke_width=3
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        pt_line_b = always_redraw(lambda: axes_pt.plot(
-            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
-            color=RED, stroke_width=3
-        ) if time_tracker.get_value() > 0.01 else VMobject())
-        pt_line_tot = always_redraw(lambda: axes_pt.plot(
-            lambda t: 4, x_range=[0, min(max(time_tracker.get_value(), 0.02), sim_total)],
+            lambda t: 4, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
             color=YELLOW, stroke_width=3, stroke_opacity=0.7
         ) if time_tracker.get_value() > 0.01 else VMobject())
         self.add(pt_line_a, pt_line_b, pt_line_tot)
 
         # 충돌 전 이동
-        real_per_sim = 0.8
         self.play(FadeOut(vel_label), run_time=0.3)
-        self.play(time_tracker.animate.set_value(collision_t), run_time=collision_t * real_per_sim, rate_func=linear)
+        self.play(time_tracker.animate.set_value(collision_t),
+                  run_time=collision_t * self.REAL_PER_SIM, rate_func=linear)
 
-        # 충돌 Flash + 막대 업데이트 동시
-        collision_point = box_a.get_right()
-        new_bar_a = Rectangle(width=bar_width, height=2 * bar_scale, color=BLUE, fill_opacity=0.7)
-        new_bar_b = Rectangle(width=bar_width, height=2 * bar_scale, color=RED, fill_opacity=0.7)
-        new_bar_a.move_to(bar_a.get_bottom(), aligned_edge=DOWN)
-        new_bar_b.move_to(bar_b.get_bottom(), aligned_edge=DOWN)
-        new_val_a = MathTex("2", font_size=18, color=WHITE).next_to(new_bar_a, UP, buff=0.05)
-        new_val_b = MathTex("2", font_size=18, color=WHITE).next_to(new_bar_b, UP, buff=0.05)
+        # 충돌 효과 + 막대 업데이트
+        collision_point = obj_a["box"].get_right()
+        bar_anims = self._update_bars(bar_data, [0, 4, 4], [BLUE, RED, YELLOW])
+        self._collision_effect(collision_point, obj_a["box"], obj_b["box"], bar_anims)
+
+        # 충돌 후
+        self.play(time_tracker.animate.set_value(self.SIM_TOTAL),
+                  run_time=(self.SIM_TOTAL - collision_t) * self.REAL_PER_SIM, rate_func=linear)
+
+        # 정리
+        self._clear_object_updaters(obj_a, obj_b)
+        self.remove(vel_arrow_dyn, vel_label_a_dyn, vel_arrow_b_dyn, vel_label_b_dyn,
+                    pt_line_a, pt_line_b, pt_line_tot)
+
+        # 정적 그래프
+        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, self.SIM_TOTAL], color=BLUE, stroke_width=3)
+        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, self.SIM_TOTAL], color=RED, stroke_width=3)
+        final_pt_tot = axes_pt.plot(lambda t: 4, x_range=[0, self.SIM_TOTAL],
+                                    color=YELLOW, stroke_width=3, stroke_opacity=0.7)
+        self.add(final_pt_a, final_pt_b, final_pt_tot)
+
+        pt_lbl_a = Text("A의 운동량", font_size=self.FONT_LABEL, color=BLUE)
+        pt_lbl_a.next_to(axes_pt.c2p(self.SIM_TOTAL, 0), RIGHT, buff=0.15)
+        pt_lbl_b = Text("B의 운동량", font_size=self.FONT_LABEL, color=RED)
+        pt_lbl_b.next_to(axes_pt.c2p(self.SIM_TOTAL, 4), RIGHT, buff=0.15)
+        pt_lbl_tot = Text("총 운동량", font_size=self.FONT_LABEL, color=YELLOW)
+        pt_lbl_tot.next_to(axes_pt.c2p(0, 4), RIGHT, buff=0.15).shift(UP * 0.3)
+        self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_tot), run_time=0.5)
+
+        conclusion = MathTex(r"p_1 + p_2 = p_1' + p_2'",
+                             font_size=self.FONT_CALC, color=YELLOW)
+        conclusion.next_to(title, DOWN, buff=0.3)
+        self.play(Write(conclusion), run_time=1.0)
+        self.wait(2.0)
+
+    # ═══════════ Phase 3: 다른 질량 완전 탄성 충돌 ═══════════
+
+    def phase3_different_mass_collision(self):
+        # ── 1. 타이틀 ──
+        title = VGroup(
+            Text("실험 B: 다른 질량 탄성 충돌", font_size=30, color=WHITE),
+            MathTex(r"(m_A = 1\text{kg},\; v_A = 6\text{m/s},\; m_B = 2\text{kg},\; v_B = 0)",
+                    font_size=self.FONT_SUBTITLE, color=WHITE)
+        ).arrange(RIGHT, buff=0.3, aligned_edge=UP)
+        title.to_edge(UP)
+        self.play(Write(title))
+        self.wait(0.5)
+
+        # ── 2. 트랙 ──
+        track_data = self._make_track()
+        self.play(Create(track_data["track"]), Create(track_data["ticks"]),
+                  Write(track_data["labels"]), run_time=0.75)
+        center_y = track_data["track"].get_center()[1]
+
+        # ── 3. p-t 그래프 ──
+        pt_data = self._make_pt_axes(y_range=[-4, 10, 2], y_numbers=[-2, 0, 2, 4, 6, 8],
+                                     y_length=3.5)
+        axes_pt = pt_data["axes"]
+        self.play(Create(axes_pt), Write(pt_data["x_lab"]), Write(pt_data["y_lab"]), run_time=0.75)
+
+        # ── 4. 운동량 막대 ──
+        bar_data = self._make_momentum_bars(
+            values=[6, 0, 6], colors=[BLUE, RED, YELLOW],
+            labels=["p_A", "p_B", "p_{tot}"], bar_scale=0.3)
         self.play(
-            Flash(collision_point, color=YELLOW, flash_radius=0.5, line_length=0.3),
-            Transform(bar_a, new_bar_a), Transform(bar_b, new_bar_b),
-            Transform(bar_val_a, new_val_a), Transform(bar_val_b, new_val_b),
+            FadeIn(bar_data["bars"]), Write(bar_data["bar_labels"]),
+            Write(bar_data["bar_title"]), Write(bar_data["val_labels"]),
+            run_time=0.75
+        )
+
+        # ── 5. 물체 ──
+        START_A_X, START_B_X = -4.0, 0.0
+        obj_a = self._make_object(START_A_X, center_y, self.OBJ_SIZE_SMALL, BLUE, "A", "1\\,\\text{kg}")
+        obj_b = self._make_object(START_B_X, center_y, self.OBJ_SIZE_MEDIUM, RED, "B", "2\\,\\text{kg}")
+        vel_arrow = Arrow(
+            start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 1.0,
+            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+        TRACK_BOTTOM_Y = center_y - 0.15
+        vel_label = MathTex("v=6", font_size=20, color=BLUE)
+        vel_label.move_to([obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        self.play(
+            FadeIn(obj_a["box"]), FadeIn(obj_b["box"]),
+            Write(obj_a["label"]), Write(obj_b["label"]),
+            Write(obj_a["mass"]), Write(obj_b["mass"]),
+            Create(vel_arrow), Write(vel_label),
+            run_time=0.75
+        )
+        self.wait(0.3)
+
+        # ── 6. 충돌 시뮬레이션 ──
+        SCALE_V = 0.35
+        V_A, V_B = 6.0, 0.0
+        V_A_AFTER, V_B_AFTER = -2.0, 4.0
+        obj_a_size = self.OBJ_SIZE_SMALL
+        obj_b_size = self.OBJ_SIZE_MEDIUM
+
+        dist = (START_B_X - obj_b_size / 2) - (START_A_X + obj_a_size / 2)
+        collision_t = dist / (V_A * SCALE_V)
+        time_tracker = ValueTracker(0)
+
+        def pos_a(t):
+            if t <= collision_t:
+                return START_A_X + V_A * SCALE_V * t
+            return START_A_X + V_A * SCALE_V * collision_t + V_A_AFTER * SCALE_V * (t - collision_t)
+
+        def pos_b(t):
+            if t <= collision_t:
+                return START_B_X
+            return START_B_X + V_B_AFTER * SCALE_V * (t - collision_t)
+
+        y_a = center_y + obj_a_size / 2 + 0.1
+        y_b = center_y + obj_b_size / 2 + 0.1
+        self._setup_object_updaters(obj_a, pos_a, time_tracker, y_a)
+        self._setup_object_updaters(obj_b, pos_b, time_tracker, y_b)
+
+        vel_arrow_a_dyn = always_redraw(lambda: (
+            Arrow(
+                start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 1.0,
+                color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
+            ) if time_tracker.get_value() < collision_t else (
+                Arrow(
+                    start=obj_a["box"].get_left(), end=obj_a["box"].get_left() + LEFT * 0.4,
+                    color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
+                ) if time_tracker.get_value() > collision_t + 0.2 else VMobject()
+            )
+        ))
+        vel_label_a_dyn = always_redraw(lambda: (
+            MathTex("v=6", font_size=20, color=BLUE).move_to(
+                [obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+            if time_tracker.get_value() < collision_t else (
+                MathTex("v=-2", font_size=20, color=BLUE).move_to(
+                    [obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+                if time_tracker.get_value() > collision_t + 0.2 else VMobject()
+            )
+        ))
+        vel_arrow_b_dyn = always_redraw(lambda: Arrow(
+            start=obj_b["box"].get_right(), end=obj_b["box"].get_right() + RIGHT * 0.7,
+            color=RED, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
+        ) if time_tracker.get_value() > collision_t + 0.2 else VMobject())
+        vel_label_b_dyn = always_redraw(lambda: MathTex(
+            "v=4", font_size=20, color=RED
+        ).move_to([obj_b["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        if time_tracker.get_value() > collision_t + 0.2 else VMobject())
+
+        self.remove(vel_arrow)
+        self.add(vel_arrow_a_dyn, vel_label_a_dyn, vel_arrow_b_dyn, vel_label_b_dyn)
+
+        # p-t 그래프
+        def p_a_func(t):
+            s = self._smooth_step(t, collision_t)
+            return 6 * (1 - s) + (-2) * s
+
+        def p_b_func(t):
+            s = self._smooth_step(t, collision_t)
+            return 8 * s
+
+        pt_line_a = always_redraw(lambda: axes_pt.plot(
+            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=BLUE, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_b = always_redraw(lambda: axes_pt.plot(
+            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=RED, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_tot = always_redraw(lambda: axes_pt.plot(
+            lambda t: 6, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=YELLOW, stroke_width=3, stroke_opacity=0.7
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        self.add(pt_line_a, pt_line_b, pt_line_tot)
+
+        # 충돌 전
+        self.play(FadeOut(vel_label), run_time=0.3)
+        self.play(time_tracker.animate.set_value(collision_t),
+                  run_time=collision_t * self.REAL_PER_SIM, rate_func=linear)
+
+        # 충돌 효과 + 막대 업데이트
+        collision_point = obj_a["box"].get_right()
+        bar_anims = self._update_bars(bar_data, [-2, 8, 6], [BLUE, RED, YELLOW])
+        self._collision_effect(collision_point, obj_a["box"], obj_b["box"], bar_anims)
+
+        # 충돌 후
+        self.play(time_tracker.animate.set_value(self.SIM_TOTAL),
+                  run_time=(self.SIM_TOTAL - collision_t) * self.REAL_PER_SIM, rate_func=linear)
+
+        # 정리
+        self._clear_object_updaters(obj_a, obj_b)
+        self.remove(vel_arrow_a_dyn, vel_label_a_dyn, vel_arrow_b_dyn, vel_label_b_dyn,
+                    pt_line_a, pt_line_b, pt_line_tot)
+
+        # 정적 그래프
+        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, self.SIM_TOTAL], color=BLUE, stroke_width=3)
+        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, self.SIM_TOTAL], color=RED, stroke_width=3)
+        final_pt_tot = axes_pt.plot(lambda t: 6, x_range=[0, self.SIM_TOTAL],
+                                    color=YELLOW, stroke_width=3, stroke_opacity=0.7)
+        self.add(final_pt_a, final_pt_b, final_pt_tot)
+
+        pt_lbl_a = Text("A의 운동량", font_size=self.FONT_LABEL, color=BLUE)
+        pt_lbl_a.next_to(axes_pt.c2p(self.SIM_TOTAL, -2), RIGHT, buff=0.15)
+        pt_lbl_b = Text("B의 운동량", font_size=self.FONT_LABEL, color=RED)
+        pt_lbl_b.next_to(axes_pt.c2p(self.SIM_TOTAL, 8), RIGHT, buff=0.15)
+        pt_lbl_tot = Text("총 운동량", font_size=self.FONT_LABEL, color=YELLOW)
+        pt_lbl_tot.next_to(axes_pt.c2p(0, 6), RIGHT, buff=0.15).shift(UP * 0.3)
+        self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_tot), run_time=0.5)
+        self.wait(1.5)
+
+        # ── 7. 그래프/막대 정리 후 수식 검증 ──
+        self.play(
+            *[FadeOut(m) for m in [
+                final_pt_a, final_pt_b, final_pt_tot,
+                pt_lbl_a, pt_lbl_b, pt_lbl_tot,
+                axes_pt, pt_data["x_lab"], pt_data["y_lab"],
+                bar_data["bars"], bar_data["bar_labels"], bar_data["bar_title"],
+                bar_data["val_labels"],
+            ]],
             run_time=0.5
         )
 
+        before_collision = VGroup(
+            Text("충돌 전 운동량", font_size=24, color=YELLOW),
+            MathTex(r"p_A = 1 \times 6 = 6", font_size=24, color=BLUE),
+            MathTex(r"p_B = 2 \times 0 = 0", font_size=24, color=RED),
+            MathTex(r"p_{tot} = 6 + 0 = 6\;\checkmark", font_size=26, color=YELLOW),
+        )
+        after_collision = VGroup(
+            Text("충돌 후 운동량", font_size=24, color=YELLOW),
+            MathTex(r"p_A' = 1 \times (-2) = -2", font_size=24, color=BLUE),
+            MathTex(r"p_B' = 2 \times 4 = 8", font_size=24, color=RED),
+            MathTex(r"p_{tot}' = -2 + 8 = 6\;\checkmark", font_size=26, color=YELLOW),
+        )
+
+        before_collision.arrange(DOWN, buff=0.3, aligned_edge=LEFT)
+        after_collision.arrange(DOWN, buff=0.3, aligned_edge=LEFT)
+
+        formulas = VGroup(before_collision, after_collision)
+        formulas.arrange(RIGHT, buff=1.5)
+        formulas.move_to(DOWN * 1.0)
+
+        for v in before_collision:
+            self.play(Write(v), run_time=0.5)
+        self.wait(0.5)
+        for v in after_collision:
+            self.play(Write(v), run_time=0.5)
+
+        self.wait(2.0)
+
+    # ═══════════ Phase 4: 3물체 연쇄 탄성 충돌 (다른 질량) ═══════════
+
+    def phase4_three_body_collision(self):
+        # ── 1. 타이틀 ──
+        # A(1kg, v=6) → B(2kg, 정지) → C(3kg, 정지)
+        # 1차 충돌(A→B): v_A'=(1-2)/(1+2)*6=-2, v_B'=2*1/(1+2)*6=4
+        # 2차 충돌(B→C): v_B''=(2-3)/(2+3)*4=-0.8, v_C'=2*2/(2+3)*4=3.2
+        title = VGroup(
+            Text("실험 C: 3물체 연쇄 탄성 충돌", font_size=30, color=WHITE),
+            MathTex(r"(m_A\!=\!1,\; m_B\!=\!2,\; m_C\!=\!3\text{kg},\; v_A\!=\!6\text{m/s})",
+                    font_size=self.FONT_SUBTITLE, color=WHITE)
+        ).arrange(RIGHT, buff=0.3, aligned_edge=UP)
+        title.to_edge(UP)
+        self.play(Write(title))
+        self.wait(0.5)
+
+        # ── 2. 트랙 ──
+        track_data = self._make_track()
+        self.play(Create(track_data["track"]), Create(track_data["ticks"]),
+                  Write(track_data["labels"]), run_time=0.75)
+        center_y = track_data["track"].get_center()[1]
+
+        # ── 3. p-t 그래프 ──
+        pt_data = self._make_pt_axes(y_range=[-4, 12, 2],
+                                     y_numbers=[-2, 0, 2, 4, 6, 8, 10],
+                                     y_length=3.5)
+        axes_pt = pt_data["axes"]
+        self.play(Create(axes_pt), Write(pt_data["x_lab"]), Write(pt_data["y_lab"]), run_time=0.75)
+
+        # ── 4. 운동량 막대 ──
+        bar_data = self._make_momentum_bars(
+            values=[6, 0, 0, 6], colors=[BLUE, RED, GREEN, YELLOW],
+            labels=["p_A", "p_B", "p_C", "p_{tot}"],
+            bar_origin=RIGHT * 4.0 + DOWN * 2.5, bar_scale=0.25)
+        self.play(
+            FadeIn(bar_data["bars"]), Write(bar_data["bar_labels"]),
+            Write(bar_data["bar_title"]), Write(bar_data["val_labels"]),
+            run_time=0.75
+        )
+
+        # ── 5. 물체 ──
+        START_A_X, START_B_X, START_C_X = -5.0, -1.0, 3.0
+        obj_a_size = self.OBJ_SIZE_SMALL   # 1kg
+        obj_b_size = self.OBJ_SIZE_MEDIUM  # 2kg
+        obj_c_size = self.OBJ_SIZE_LARGE   # 3kg
+
+        obj_a = self._make_object(START_A_X, center_y, obj_a_size, BLUE, "A", "1\\,\\text{kg}")
+        obj_b = self._make_object(START_B_X, center_y, obj_b_size, RED, "B", "2\\,\\text{kg}")
+        obj_c = self._make_object(START_C_X, center_y, obj_c_size, GREEN, "C", "3\\,\\text{kg}")
+
+        self.play(
+            FadeIn(obj_a["box"]), FadeIn(obj_b["box"]), FadeIn(obj_c["box"]),
+            Write(obj_a["label"]), Write(obj_b["label"]), Write(obj_c["label"]),
+            Write(obj_a["mass"]), Write(obj_b["mass"]), Write(obj_c["mass"]),
+            run_time=0.75
+        )
+        self.wait(0.3)
+
+        # ── 6. 충돌 물리 계산 ──
+        SCALE_V = 0.35
+        # 초기: v_A=6, v_B=0, v_C=0
+        # 1차(A→B): v_A'=-2, v_B'=4
+        # 2차(B→C): v_B''=-0.8, v_C'=3.2
+        V_A_INIT = 6.0
+        V_A_AFTER1 = -2.0
+        V_B_AFTER1 = 4.0
+        V_B_AFTER2 = -0.8
+        V_C_AFTER2 = 3.2
+
+        # 1차 충돌 시간: A 오른쪽 → B 왼쪽
+        dist_ab = (START_B_X - obj_b_size / 2) - (START_A_X + obj_a_size / 2)
+        collision1_t = dist_ab / (V_A_INIT * SCALE_V)
+
+        # 2차 충돌 시간: B가 v=4로 이동, C 정지, B 오른쪽 → C 왼쪽
+        dist_bc = (START_C_X - obj_c_size / 2) - (START_B_X + obj_b_size / 2)
+        collision2_t = collision1_t + dist_bc / (V_B_AFTER1 * SCALE_V)
+
+        time_tracker = ValueTracker(0)
+
+        def pos_a(t):
+            if t <= collision1_t:
+                return START_A_X + V_A_INIT * SCALE_V * t
+            return START_A_X + V_A_INIT * SCALE_V * collision1_t + V_A_AFTER1 * SCALE_V * (t - collision1_t)
+
+        def pos_b(t):
+            if t <= collision1_t:
+                return START_B_X
+            if t <= collision2_t:
+                return START_B_X + V_B_AFTER1 * SCALE_V * (t - collision1_t)
+            return (START_B_X + V_B_AFTER1 * SCALE_V * (collision2_t - collision1_t)
+                    + V_B_AFTER2 * SCALE_V * (t - collision2_t))
+
+        def pos_c(t):
+            if t <= collision2_t:
+                return START_C_X
+            return START_C_X + V_C_AFTER2 * SCALE_V * (t - collision2_t)
+
+        # 현재 속도 함수 (화살표 표시용)
+        def vel_a(t):
+            if t < collision1_t:
+                return V_A_INIT
+            return V_A_AFTER1
+
+        def vel_b(t):
+            if t < collision1_t:
+                return 0.0
+            if t < collision2_t:
+                return V_B_AFTER1
+            return V_B_AFTER2
+
+        def vel_c(t):
+            if t < collision2_t:
+                return 0.0
+            return V_C_AFTER2
+
+        y_a = center_y + obj_a_size / 2 + 0.1
+        y_b = center_y + obj_b_size / 2 + 0.1
+        y_c = center_y + obj_c_size / 2 + 0.1
+        self._setup_object_updaters(obj_a, pos_a, time_tracker, y_a)
+        self._setup_object_updaters(obj_b, pos_b, time_tracker, y_b)
+        self._setup_object_updaters(obj_c, pos_c, time_tracker, y_c)
+
+        # ── 7. 항상 표시되는 속도 화살표 + 라벨 (트랙 아래 표시) ──
+        ARROW_SCALE = 0.13
+        TRACK_BOTTOM_Y = center_y - 0.15  # 트랙 라인 바로 아래
+        VEL_FONT = 20
+
+        def _make_vel_group(box, v, color):
+            """속도값에 따라 화살표+라벨 반환, 라벨은 트랙 아래"""
+            vel_abs = abs(v)
+            v_str = f"{v:.1f}" if v != int(v) else f"{int(v)}"
+            # 라벨은 항상 물체 아래(트랙 아래)에 표시
+            lbl = MathTex(f"v={v_str}", font_size=VEL_FONT, color=color)
+            lbl.move_to([box.get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+            if vel_abs < 0.01:
+                return VGroup(lbl)
+            arrow_len = max(vel_abs * ARROW_SCALE, 0.25)
+            if v > 0:
+                arrow = Arrow(
+                    start=box.get_right(), end=box.get_right() + RIGHT * arrow_len,
+                    color=color, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+            else:
+                arrow = Arrow(
+                    start=box.get_left(), end=box.get_left() + LEFT * arrow_len,
+                    color=color, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+            return VGroup(arrow, lbl)
+
+        vel_display_a = always_redraw(
+            lambda: _make_vel_group(obj_a["box"], vel_a(time_tracker.get_value()), BLUE))
+        vel_display_b = always_redraw(
+            lambda: _make_vel_group(obj_b["box"], vel_b(time_tracker.get_value()), RED))
+        vel_display_c = always_redraw(
+            lambda: _make_vel_group(obj_c["box"], vel_c(time_tracker.get_value()), GREEN))
+        self.add(vel_display_a, vel_display_b, vel_display_c)
+
+        # ── 8. p-t 그래프 ──
+        # p_A: 6 → -2 (at c1)
+        # p_B: 0 → 8 (at c1) → -1.6 (at c2)
+        # p_C: 0 → 0 → 9.6 (at c2)
+        # total = 6
+
+        def p_a_func(t):
+            s1 = self._smooth_step(t, collision1_t)
+            return V_A_INIT * (1 - s1) + V_A_AFTER1 * s1  # 6 → -2
+
+        def p_b_func(t):
+            s1 = self._smooth_step(t, collision1_t)
+            s2 = self._smooth_step(t, collision2_t)
+            # 0 → 8 (at c1) → -1.6 (at c2)
+            p_b_after1 = 2 * V_B_AFTER1  # = 8
+            p_b_after2 = 2 * V_B_AFTER2  # = -1.6
+            before = 0.0
+            mid = p_b_after1
+            after = p_b_after2
+            return before * (1 - s1) + mid * s1 * (1 - s2) + after * s2
+
+        def p_c_func(t):
+            s2 = self._smooth_step(t, collision2_t)
+            return 3 * V_C_AFTER2 * s2  # 0 → 9.6
+
+        pt_line_a = always_redraw(lambda: axes_pt.plot(
+            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=BLUE, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_b = always_redraw(lambda: axes_pt.plot(
+            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=RED, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_c = always_redraw(lambda: axes_pt.plot(
+            p_c_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=GREEN, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_tot = always_redraw(lambda: axes_pt.plot(
+            lambda t: 6, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=YELLOW, stroke_width=3, stroke_opacity=0.7
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        self.add(pt_line_a, pt_line_b, pt_line_c, pt_line_tot)
+
+        # ── 9. 1차 충돌 (A→B) ──
+        self.play(time_tracker.animate.set_value(collision1_t),
+                  run_time=collision1_t * self.REAL_PER_SIM, rate_func=linear)
+
+        collision_point_1 = obj_a["box"].get_right()
+        bar_anims_1 = self._update_bars(bar_data, [-2, 8, 0, 6], [BLUE, RED, GREEN, YELLOW])
+        self._collision_effect(collision_point_1, obj_a["box"], obj_b["box"], bar_anims_1)
+
+        # ── 10. B가 C로 이동 → 2차 충돌 ──
+        self.play(time_tracker.animate.set_value(collision2_t),
+                  run_time=(collision2_t - collision1_t) * self.REAL_PER_SIM, rate_func=linear)
+
+        collision_point_2 = obj_b["box"].get_right()
+        bar_anims_2 = self._update_bars(bar_data, [-2, -1.6, 9.6, 6], [BLUE, RED, GREEN, YELLOW])
+        self._collision_effect(collision_point_2, obj_b["box"], obj_c["box"], bar_anims_2)
+
+        # ── 11. 충돌 후 이동 ──
+        self.play(time_tracker.animate.set_value(self.SIM_TOTAL),
+                  run_time=(self.SIM_TOTAL - collision2_t) * self.REAL_PER_SIM, rate_func=linear)
+
+        # 정리
+        self._clear_object_updaters(obj_a, obj_b, obj_c)
+        self.remove(vel_display_a, vel_display_b, vel_display_c,
+                    pt_line_a, pt_line_b, pt_line_c, pt_line_tot)
+
+        # 정적 그래프
+        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, self.SIM_TOTAL], color=BLUE, stroke_width=3)
+        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, self.SIM_TOTAL], color=RED, stroke_width=3)
+        final_pt_c = axes_pt.plot(p_c_func, x_range=[0, self.SIM_TOTAL], color=GREEN, stroke_width=3)
+        final_pt_tot = axes_pt.plot(lambda t: 6, x_range=[0, self.SIM_TOTAL],
+                                    color=YELLOW, stroke_width=3, stroke_opacity=0.7)
+        self.add(final_pt_a, final_pt_b, final_pt_c, final_pt_tot)
+
+        # 정적 속도 화살표 (최종 상태)
+        final_vel_a = _make_vel_group(obj_a["box"], V_A_AFTER1, BLUE)
+        final_vel_b = _make_vel_group(obj_b["box"], V_B_AFTER2, RED)
+        final_vel_c = _make_vel_group(obj_c["box"], V_C_AFTER2, GREEN)
+        self.add(final_vel_a, final_vel_b, final_vel_c)
+
+        pt_lbl_a = Text("A의 운동량", font_size=self.FONT_LABEL, color=BLUE)
+        pt_lbl_a.next_to(axes_pt.c2p(self.SIM_TOTAL, -2), RIGHT, buff=0.15)
+        pt_lbl_b = Text("B의 운동량", font_size=self.FONT_LABEL, color=RED)
+        pt_lbl_b.next_to(axes_pt.c2p(self.SIM_TOTAL, -1.6), RIGHT, buff=0.15).shift(DOWN * 0.2)
+        pt_lbl_c = Text("C의 운동량", font_size=self.FONT_LABEL, color=GREEN)
+        pt_lbl_c.next_to(axes_pt.c2p(self.SIM_TOTAL, 9.6), RIGHT, buff=0.15)
+        pt_lbl_tot = Text("총 운동량", font_size=self.FONT_LABEL, color=YELLOW)
+        pt_lbl_tot.next_to(axes_pt.c2p(0, 6), RIGHT, buff=0.15).shift(UP * 0.3)
+        self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_c), Write(pt_lbl_tot), run_time=0.5)
+
+        conclusion = Text("질량이 달라도, 연쇄 충돌에서도 총 운동량은 보존된다!",
+                          font_size=24, color=YELLOW)
+        conclusion.next_to(title, DOWN, buff=0.3)
+        self.play(Write(conclusion), run_time=1.0)
+        self.wait(2.0)
+
+    # ═══════════ Phase 5: 완전 비탄성 충돌 ═══════════
+
+    def phase5_inelastic_collision(self):
+        # ── 1. 타이틀 ──
+        title = VGroup(
+            Text("실험 D: 완전 비탄성 충돌", font_size=30, color=WHITE),
+            MathTex(r"(m_A = 1\text{kg},\; v_A = 4\text{m/s},\; m_B = 1\text{kg},\; v_B = 0)",
+                    font_size=self.FONT_SUBTITLE, color=WHITE)
+        ).arrange(RIGHT, buff=0.3, aligned_edge=UP)
+        title.to_edge(UP)
+        self.play(Write(title))
+        self.wait(0.5)
+
+        # ── 2. 트랙 ──
+        track_data = self._make_track()
+        self.play(Create(track_data["track"]), Create(track_data["ticks"]),
+                  Write(track_data["labels"]), run_time=0.75)
+        center_y = track_data["track"].get_center()[1]
+
+        # ── 3. p-t 그래프 ──
+        pt_data = self._make_pt_axes(y_range=[-1, 6, 1], y_numbers=[0, 2, 4])
+        axes_pt = pt_data["axes"]
+        self.play(Create(axes_pt), Write(pt_data["x_lab"]), Write(pt_data["y_lab"]), run_time=0.75)
+
+        # ── 4. 운동량 막대 ──
+        bar_data = self._make_momentum_bars(
+            values=[4, 0, 4], colors=[BLUE, RED, YELLOW],
+            labels=["p_A", "p_B", "p_{tot}"], bar_scale=0.35)
+        self.play(
+            FadeIn(bar_data["bars"]), Write(bar_data["bar_labels"]),
+            Write(bar_data["bar_title"]), Write(bar_data["val_labels"]),
+            run_time=0.75
+        )
+
+        # ── 5. 물체 ──
+        START_A_X, START_B_X = -4.0, 0.0
+        obj_size = self.OBJ_SIZE_SMALL
+        obj_a = self._make_object(START_A_X, center_y, obj_size, BLUE, "A", "1\\,\\text{kg}")
+        obj_b = self._make_object(START_B_X, center_y, obj_size, RED, "B", "1\\,\\text{kg}")
+        vel_arrow = Arrow(
+            start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 0.8,
+            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3)
+        TRACK_BOTTOM_Y = center_y - 0.15
+        vel_label = MathTex("v=4", font_size=20, color=BLUE)
+        vel_label.move_to([obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        self.play(
+            FadeIn(obj_a["box"]), FadeIn(obj_b["box"]),
+            Write(obj_a["label"]), Write(obj_b["label"]),
+            Write(obj_a["mass"]), Write(obj_b["mass"]),
+            Create(vel_arrow), Write(vel_label),
+            run_time=0.75
+        )
+        self.wait(0.3)
+
+        # ── 6. 충돌 시뮬레이션 ──
+        V_BEFORE = 4.0
+        V_AFTER = 2.0
+
+        dist = (START_B_X - obj_size / 2) - (START_A_X + obj_size / 2)
+        collision_t = dist / (V_BEFORE * self.SCALE_V)
+        time_tracker = ValueTracker(0)
+
+        def pos_a(t):
+            if t <= collision_t:
+                return START_A_X + V_BEFORE * self.SCALE_V * t
+            return START_A_X + V_BEFORE * self.SCALE_V * collision_t + V_AFTER * self.SCALE_V * (t - collision_t)
+
+        def pos_b(t):
+            if t <= collision_t:
+                return START_B_X
+            return START_B_X + V_AFTER * self.SCALE_V * (t - collision_t)
+
+        y_pos = center_y + obj_size / 2 + 0.1
+        self._setup_object_updaters(obj_a, pos_a, time_tracker, y_pos)
+        self._setup_object_updaters(obj_b, pos_b, time_tracker, y_pos)
+
+        vel_dyn = always_redraw(lambda: Arrow(
+            start=obj_a["box"].get_right(), end=obj_a["box"].get_right() + RIGHT * 0.8,
+            color=BLUE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
+        ) if time_tracker.get_value() < collision_t else VMobject())
+        vel_label_dyn = always_redraw(lambda: MathTex(
+            "v=4", font_size=20, color=BLUE
+        ).move_to([obj_a["box"].get_center()[0], TRACK_BOTTOM_Y - 0.35, 0])
+        if time_tracker.get_value() < collision_t else VMobject())
+
+        self.remove(vel_arrow)
+        self.add(vel_dyn, vel_label_dyn)
+
+        # p-t 그래프
+        def p_a_func(t):
+            s = self._smooth_step(t, collision_t)
+            return 4 * (1 - s) + 2 * s
+
+        def p_b_func(t):
+            s = self._smooth_step(t, collision_t)
+            return 2 * s
+
+        pt_line_a = always_redraw(lambda: axes_pt.plot(
+            p_a_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=BLUE, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_b = always_redraw(lambda: axes_pt.plot(
+            p_b_func, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=RED, stroke_width=3
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        pt_line_tot = always_redraw(lambda: axes_pt.plot(
+            lambda t: 4, x_range=[0, min(max(time_tracker.get_value(), 0.02), self.SIM_TOTAL)],
+            color=YELLOW, stroke_width=3, stroke_opacity=0.7
+        ) if time_tracker.get_value() > 0.01 else VMobject())
+        self.add(pt_line_a, pt_line_b, pt_line_tot)
+
+        # 충돌 전
+        self.play(FadeOut(vel_label), run_time=0.3)
+        self.play(time_tracker.animate.set_value(collision_t),
+                  run_time=collision_t * self.REAL_PER_SIM, rate_func=linear)
+
+        # 충돌 효과 + 막대 업데이트
+        collision_point = obj_a["box"].get_right()
+        bar_anims = self._update_bars(bar_data, [2, 2, 4], [BLUE, RED, YELLOW])
+        self._collision_effect(collision_point, obj_a["box"], obj_b["box"], bar_anims)
+
         # 합체 처리
-        box_b.clear_updaters()
-        label_b.clear_updaters()
-        mass_b.clear_updaters()
-        self.remove(vel_dyn)
-        self.play(box_b.animate.next_to(box_a, RIGHT, buff=0), run_time=0.3)
-        label_b.move_to(box_b)
-        self.play(FadeOut(mass_a), FadeOut(mass_b), run_time=0.2)
+        obj_b["box"].clear_updaters()
+        obj_b["label"].clear_updaters()
+        obj_b["mass"].clear_updaters()
+        self.remove(vel_dyn, vel_label_dyn)
+        self.play(obj_b["box"].animate.next_to(obj_a["box"], RIGHT, buff=0), run_time=0.3)
+        obj_b["label"].move_to(obj_b["box"])
+
+        # PURPLE 테두리로 합체 표현
+        merged_border = SurroundingRectangle(
+            VGroup(obj_a["box"], obj_b["box"]), color=PURPLE, buff=0.05,
+            corner_radius=0.05, stroke_width=3)
+        merged_border.add_updater(lambda m: m.become(
+            SurroundingRectangle(VGroup(obj_a["box"], obj_b["box"]), color=PURPLE, buff=0.05,
+                                 corner_radius=0.05, stroke_width=3)))
+
+        self.play(FadeOut(obj_a["mass"]), FadeOut(obj_b["mass"]), run_time=0.2)
+        self.play(Create(merged_border), run_time=0.3)
 
         merged_label = MathTex("2\\,\\text{kg}", font_size=18, color=PURPLE)
-        merged_label.add_updater(lambda m: m.next_to(VGroup(box_a, box_b), UP, buff=0.1))
+        merged_label.add_updater(lambda m: m.next_to(VGroup(obj_a["box"], obj_b["box"]), UP, buff=0.1))
         self.play(Write(merged_label), run_time=0.3)
 
         merged_vel = always_redraw(lambda: Arrow(
-            start=box_b.get_right(), end=box_b.get_right() + RIGHT * 0.4,
+            start=obj_b["box"].get_right(), end=obj_b["box"].get_right() + RIGHT * 0.4,
             color=PURPLE, buff=0, stroke_width=4, max_tip_length_to_length_ratio=0.3,
         ))
         merged_vel_label = always_redraw(lambda: MathTex(
-            "v'=2", font_size=18, color=PURPLE
-        ).next_to(merged_vel, UP, buff=0.05))
+            "v'=2", font_size=20, color=PURPLE
+        ).move_to([obj_a["box"].get_center()[0] + 0.25, TRACK_BOTTOM_Y - 0.35, 0]))
         self.add(merged_vel, merged_vel_label)
 
-        box_b.add_updater(lambda m: m.next_to(box_a, RIGHT, buff=0))
-        label_b.add_updater(lambda m: m.move_to(box_b))
+        obj_b["box"].add_updater(lambda m: m.next_to(obj_a["box"], RIGHT, buff=0))
+        obj_b["label"].add_updater(lambda m: m.move_to(obj_b["box"]))
 
         # 충돌 후
-        self.play(time_tracker.animate.set_value(sim_total), run_time=(sim_total - collision_t) * real_per_sim, rate_func=linear)
+        self.play(time_tracker.animate.set_value(self.SIM_TOTAL),
+                  run_time=(self.SIM_TOTAL - collision_t) * self.REAL_PER_SIM, rate_func=linear)
 
         # 정리
-        box_a.clear_updaters()
-        box_b.clear_updaters()
-        label_a.clear_updaters()
-        label_b.clear_updaters()
+        obj_a["box"].clear_updaters()
+        obj_b["box"].clear_updaters()
+        obj_a["label"].clear_updaters()
+        obj_b["label"].clear_updaters()
         merged_label.clear_updaters()
+        merged_border.clear_updaters()
         self.remove(merged_vel, merged_vel_label, vel_dyn, pt_line_a, pt_line_b, pt_line_tot)
 
         # 정적 그래프
-        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, sim_total], color=BLUE, stroke_width=3)
-        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, sim_total], color=RED, stroke_width=3)
-        final_pt_tot = axes_pt.plot(lambda t: 4, x_range=[0, sim_total], color=YELLOW, stroke_width=3, stroke_opacity=0.7)
+        final_pt_a = axes_pt.plot(p_a_func, x_range=[0, self.SIM_TOTAL], color=BLUE, stroke_width=3)
+        final_pt_b = axes_pt.plot(p_b_func, x_range=[0, self.SIM_TOTAL], color=RED, stroke_width=3)
+        final_pt_tot = axes_pt.plot(lambda t: 4, x_range=[0, self.SIM_TOTAL],
+                                    color=YELLOW, stroke_width=3, stroke_opacity=0.7)
         self.add(final_pt_a, final_pt_b, final_pt_tot)
 
-        pt_lbl_a = Text("A의 운동량", font_size=14, color=BLUE).next_to(axes_pt.c2p(sim_total, 2), RIGHT, buff=0.15).shift(UP * 0.15)
-        pt_lbl_b = Text("B의 운동량", font_size=14, color=RED).next_to(axes_pt.c2p(sim_total, 2), RIGHT, buff=0.15).shift(DOWN * 0.15)
-        pt_lbl_tot = Text("총 운동량", font_size=14, color=YELLOW).next_to(axes_pt.c2p(0, 4), RIGHT, buff=0.15).shift(UP * 0.3)
+        pt_lbl_a = Text("A의 운동량", font_size=self.FONT_LABEL, color=BLUE)
+        pt_lbl_a.next_to(axes_pt.c2p(self.SIM_TOTAL, 2), RIGHT, buff=0.15).shift(UP * 0.15)
+        pt_lbl_b = Text("B의 운동량", font_size=self.FONT_LABEL, color=RED)
+        pt_lbl_b.next_to(axes_pt.c2p(self.SIM_TOTAL, 2), RIGHT, buff=0.15).shift(DOWN * 0.15)
+        pt_lbl_tot = Text("총 운동량", font_size=self.FONT_LABEL, color=YELLOW)
+        pt_lbl_tot.next_to(axes_pt.c2p(0, 4), RIGHT, buff=0.15).shift(UP * 0.3)
         self.play(Write(pt_lbl_a), Write(pt_lbl_b), Write(pt_lbl_tot), run_time=0.5)
 
         conclusion = VGroup(
-            MathTex(r"p_{tot} = 4", font_size=36, color=YELLOW),
+            MathTex(r"p_{tot} = 4", font_size=self.FONT_CALC, color=YELLOW),
             Text("(보존)", font_size=24, color=YELLOW),
         ).arrange(RIGHT, buff=0.2)
         conclusion.next_to(title, DOWN, buff=0.3)
         self.play(Write(conclusion), run_time=1.0)
         self.wait(1.5)
 
-        # --- 그래프 후 에너지 비교 ---
+        # ── 에너지 비교 ──
         self.play(
             *[FadeOut(m) for m in [
                 final_pt_a, final_pt_b, final_pt_tot,
                 pt_lbl_a, pt_lbl_b, pt_lbl_tot,
-                axes_pt, x_lab, y_lab, conclusion,
-                bars, bar_labels_text, bar_title,
-                bar_val_a, bar_val_b, bar_val_tot,
-                bar_a, bar_b, bar_tot,
+                axes_pt, pt_data["x_lab"], pt_data["y_lab"], conclusion,
+                bar_data["bars"], bar_data["bar_labels"], bar_data["bar_title"],
+                bar_data["val_labels"],
             ]],
             run_time=0.5
         )
 
-        # --- 운동량 보존 수식 (상단) ---
+        # 운동량 보존 수식
         p_section_title = Text("운동량 (보존)", font_size=22, color=GREEN)
         p_section_title.move_to(LEFT * 5 + DOWN * 0.5)
 
@@ -885,10 +1194,9 @@ class MomentumConservation(Scene):
         self.play(Write(p_arrow), run_time=0.3)
         for v in p_after:
             self.play(Write(v), run_time=0.4)
-
         self.wait(0.5)
 
-        # --- 운동에너지 비보존 수식 (우측) ---
+        # 운동에너지 비보존
         e_section_title = Text("운동에너지 (비보존)", font_size=22, color="#9ACD32")
         e_section_title.move_to(RIGHT * 1.5 + DOWN * 0.5)
 
@@ -919,14 +1227,36 @@ class MomentumConservation(Scene):
         for v in e_after:
             self.play(Write(v), run_time=0.4)
 
-        key_msg = Text("운동량은 항상 보존, 운동에너지는 충돌 종류에 따라 다르다!", font_size=22, color=YELLOW)
+        key_msg = Text("운동량은 항상 보존, 운동에너지는 충돌 종류에 따라 다르다!",
+                       font_size=22, color=YELLOW)
         key_msg.to_edge(DOWN, buff=0.2)
         self.play(Write(key_msg), run_time=1.0)
         self.wait(2.0)
 
-    # =========================================================
-    # Outro
-    # =========================================================
+    # ═══════════ 정리 (Summary) ═══════════
+
+    def summary(self):
+        summary_title = Text("정리", font_size=44, color=YELLOW)
+        summary_title.to_edge(UP, buff=0.8)
+        self.play(Write(summary_title), run_time=0.75)
+
+        points = VGroup(
+            Text("• 운동량 = 질량 × 속도 (벡터량)", font_size=28, color=WHITE),
+            Text("• 외력이 없으면 총 운동량 보존", font_size=28, color=WHITE),
+            Text("• 탄성/비탄성/연쇄 충돌 모두 성립", font_size=28, color=WHITE),
+            Text("• 운동에너지는 충돌 종류에 따라 보존 여부가 다름", font_size=28, color=WHITE),
+        )
+        points.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
+        points.next_to(summary_title, DOWN, buff=0.8)
+
+        for p in points:
+            self.play(FadeIn(p, shift=RIGHT * 0.3), run_time=0.6)
+            self.wait(0.3)
+
+        self.wait(2.0)
+
+    # ═══════════ Outro ═══════════
+
     def outro(self):
         final_eq = MathTex(
             "m_1", "v_1", "+", "m_2", "v_2", "=",
@@ -934,21 +1264,12 @@ class MomentumConservation(Scene):
             font_size=64, color=WHITE
         )
         final_eq.move_to(ORIGIN)
-        final_box = SurroundingRectangle(final_eq, color=YELLOW, buff=0.4, corner_radius=0.15, stroke_width=4)
+        final_box = SurroundingRectangle(final_eq, color=YELLOW, buff=0.4,
+                                          corner_radius=0.15, stroke_width=4)
         subtitle = Text("운동량 보존 법칙", font_size=40, color=YELLOW)
         subtitle.next_to(final_box, DOWN, buff=0.5)
 
         self.play(Write(final_eq), run_time=1.5)
         self.play(Create(final_box), run_time=0.75)
         self.play(Write(subtitle), run_time=1.0)
-        self.wait(1.0)
-
-        points = VGroup(
-            Text("• 운동량 = 질량 × 속도 (벡터량)", font_size=24, color=WHITE),
-            Text("• 외력이 없으면 총 운동량 보존", font_size=24, color=WHITE),
-            Text("• 충돌 종류와 무관하게 항상 성립", font_size=24, color=WHITE),
-        )
-        points.arrange(DOWN, buff=0.3, aligned_edge=LEFT)
-        points.next_to(subtitle, DOWN, buff=0.5)
-        self.play(FadeIn(points), run_time=1.0)
         self.wait(3)

@@ -1,43 +1,90 @@
 from manim import *
 import numpy as np
 
+
 class UniformMotion(Scene):
+    # ── 물리 상수 ──
+    VELOCITY = 5
+    TOTAL_TIME = 4
+    TOTAL_DIST = 20
+
+    # ── 폰트 크기 ──
+    FONT_TITLE = 80
+    FONT_SUBTITLE = 28
+    FONT_LABEL = 20
+    FONT_AXIS_LABEL = 16
+    FONT_AXIS_NUM = 20
+    FONT_CALC = 36
+    FONT_CALC_RESULT = 40
+
     def construct(self):
-        # === Title ===
-        title = Text("등속 운동", font_size=48, color=WHITE)
-        title.to_edge(UP)
-        self.play(Write(title))
+        self.intro()
+        self.clear_screen()
+        self.setup_scene()
+        self.animate_motion()
+        self.show_displacement()
+        self.slope_to_vt()
+        self.area_to_displacement()
+        self.clear_screen()
+        self.outro()
+
+    def clear_screen(self):
+        self.play(*[FadeOut(m) for m in self.mobjects])
+        self.wait(0.5)
+
+    # ═══════════ Phase 1: 인트로 ═══════════
+    def intro(self):
+        eq = MathTex("v", "=", "\\text{const}", font_size=self.FONT_TITLE, color=WHITE)
+        eq.move_to(ORIGIN)
+        self.play(Write(eq), run_time=1.5)
+        self.wait(0.5)
+
+        box = SurroundingRectangle(eq, color=YELLOW, buff=0.4, corner_radius=0.15, stroke_width=4)
+        self.play(Create(box), run_time=0.75)
+
+        title = Text("등속 운동", font_size=44, color=YELLOW)
+        title.next_to(box, DOWN, buff=0.6)
+        self.play(Write(title), run_time=1.0)
+        self.wait(1.0)
+
+    # ═══════════ Phase 2: 씬 구성 ═══════════
+    def setup_scene(self):
+        # ── 1. 타이틀 ──
+        self.scene_title = Text("등속 운동", font_size=48, color=WHITE)
+        self.scene_title.to_edge(UP)
+        self.play(Write(self.scene_title))
         self.wait(0.75)
 
-        # === 1. 상단 영역: 1차원 수평선 (위치 트랙) ===
-        track_start = LEFT * 6
-        track_end = RIGHT * 6
-        track = Line(track_start, track_end, color=WHITE, stroke_width=3)
-        track.shift(UP * 1.5)
+        # ── 2. 트랙 (0~20 m) ──
+        TRACK_START = LEFT * 6
+        TRACK_END = RIGHT * 6
+        self.track_start = TRACK_START
+        self.track_end = TRACK_END
 
-        # 눈금 표시 (0 ~ 20)
+        self.track = Line(TRACK_START, TRACK_END, color=WHITE, stroke_width=3)
+        self.track.shift(UP * 1.5)
+
         tick_marks = VGroup()
         tick_labels = VGroup()
         for i in range(21):
-            x_pos = track_start[0] + (track_end[0] - track_start[0]) * (i / 20)
+            x_pos = TRACK_START[0] + (TRACK_END[0] - TRACK_START[0]) * (i / 20)
             tick = Line(UP * 0.1, DOWN * 0.1, color=WHITE, stroke_width=2)
-            tick.move_to([x_pos, track.get_center()[1], 0])
+            tick.move_to([x_pos, self.track.get_center()[1], 0])
             tick_marks.add(tick)
-
             if i % 5 == 0:
-                label = Text(str(i), font_size=16, color=GRAY)
+                label = Text(str(i), font_size=self.FONT_AXIS_LABEL, color=GRAY)
                 label.next_to(tick, DOWN, buff=0.15)
                 tick_labels.add(label)
 
-        position_label = Text("(m)", font_size=20, color=WHITE)
-        position_label.next_to(track, RIGHT, buff=0.3)
+        position_label = Text("(m)", font_size=self.FONT_LABEL, color=WHITE)
+        position_label.next_to(self.track, RIGHT, buff=0.3)
 
-        self.play(Create(track), run_time=0.75)
+        self.play(Create(self.track), run_time=0.75)
         self.play(Create(tick_marks), Write(tick_labels), Write(position_label), run_time=1.5)
         self.wait(0.45)
 
-        # === 2. 하단 영역(좌): v-t 그래프 ===
-        axes_vt = Axes(
+        # ── 3. v-t 그래프 (좌하단) ──
+        self.axes_vt = Axes(
             x_range=[0, 4, 1],
             y_range=[0, 8, 2],
             x_length=5,
@@ -46,16 +93,16 @@ class UniformMotion(Scene):
             x_axis_config={"numbers_to_include": [1, 2, 3, 4]},
             y_axis_config={"numbers_to_include": [5]},
         )
-        axes_vt.to_corner(DL, buff=0.8)
+        self.axes_vt.to_corner(DL, buff=0.8)
 
-        x_label_vt = Text("t (s)", font_size=20).next_to(axes_vt.x_axis, RIGHT, buff=0.2)
-        y_label_vt = Text("v (m/s)", font_size=20).next_to(axes_vt.y_axis, UP, buff=0.2)
+        x_label_vt = Text("t (s)", font_size=self.FONT_LABEL).next_to(self.axes_vt.x_axis, RIGHT, buff=0.2)
+        y_label_vt = Text("v (m/s)", font_size=self.FONT_LABEL).next_to(self.axes_vt.y_axis, UP, buff=0.2)
 
-        self.play(Create(axes_vt), Write(x_label_vt), Write(y_label_vt), run_time=1.5)
+        self.play(Create(self.axes_vt), Write(x_label_vt), Write(y_label_vt), run_time=1.5)
         self.wait(0.45)
 
-        # === 3. 하단 영역(우): s-t 그래프 ===
-        axes_st = Axes(
+        # ── 4. s-t 그래프 (우하단) ──
+        self.axes_st = Axes(
             x_range=[0, 4, 1],
             y_range=[0, 20, 5],
             x_length=5,
@@ -64,197 +111,191 @@ class UniformMotion(Scene):
             x_axis_config={"numbers_to_include": [1, 2, 3, 4]},
             y_axis_config={"numbers_to_include": [5, 10, 15, 20]},
         )
-        axes_st.to_corner(DR, buff=0.8)
+        self.axes_st.to_corner(DR, buff=0.8)
 
-        x_label_st = Text("t (s)", font_size=20).next_to(axes_st.x_axis, RIGHT, buff=0.2)
-        y_label_st = Text("s (m)", font_size=20).next_to(axes_st.y_axis, UP, buff=0.2)
+        x_label_st = Text("t (s)", font_size=self.FONT_LABEL).next_to(self.axes_st.x_axis, RIGHT, buff=0.2)
+        y_label_st = Text("s (m)", font_size=self.FONT_LABEL).next_to(self.axes_st.y_axis, UP, buff=0.2)
 
-        self.play(Create(axes_st), Write(x_label_st), Write(y_label_st), run_time=1.5)
+        self.play(Create(self.axes_st), Write(x_label_st), Write(y_label_st), run_time=1.5)
         self.wait(0.45)
 
-        # === 4. 물체 생성 ===
-        obj_size = 0.4
-        obj = Square(side_length=obj_size, color=YELLOW, fill_opacity=0.8)
-        obj_start_x = track_start[0]
-        obj.move_to([obj_start_x, track.get_center()[1] + obj_size/2 + 0.1, 0])
+    # ═══════════ Phase 3: 물체 이동 ═══════════
+    def animate_motion(self):
+        OBJ_SIZE = 0.4
+        v = self.VELOCITY
 
-        self.play(FadeIn(obj), run_time=0.75)
+        ball = Square(side_length=OBJ_SIZE, color=YELLOW, fill_opacity=0.8)
+        ball_start_x = self.track_start[0]
+        ball.move_to([ball_start_x, self.track.get_center()[1] + OBJ_SIZE / 2 + 0.1, 0])
+
+        self.play(FadeIn(ball), run_time=0.75)
         self.wait(0.45)
 
-        ghost_group = VGroup()
-        self.add(ghost_group)
+        self.ghost_group = VGroup()
+        self.add(self.ghost_group)
 
-        # === 5. 운동 파라미터 및 물체 애니메이션 ===
-        total_time = 4
-        total_distance = 20
-        v = 5  # 속도 5 m/s (일정)
-
-        # 물체 옆에 속도 라벨 (물체와 함께 이동)
+        # ── 1. 속도 라벨 ──
         velocity_label = always_redraw(lambda: MathTex(
             "v = 5\\,\\text{m/s}",
-            font_size=20,
+            font_size=self.FONT_LABEL,
             color=YELLOW
-        ).next_to(obj, UP, buff=0.1))
+        ).next_to(ball, UP, buff=0.1))
         self.add(velocity_label)
 
         time_tracker = ValueTracker(0)
         time_tracker.last_int_t = 0
 
-        ghost_x_coords = [obj.get_center()[0]]
+        self.ghost_x_coords = [ball.get_center()[0]]
 
-        def update_obj(m):
+        # ── 2. 이동 updater ──
+        track = self.track
+        track_start = self.track_start
+        track_end = self.track_end
+        total_dist = self.TOTAL_DIST
+        ghost_group = self.ghost_group
+        ghost_x_coords = self.ghost_x_coords
+
+        def update_ball(m):
             t = time_tracker.get_value()
             s = v * t
-            x_ratio = s / total_distance
-            new_x = track_start[0] + (
-                track_end[0] - track_start[0]
-            ) * x_ratio
-            m.move_to([new_x, track.get_center()[1] + obj_size/2 + 0.1, 0])
+            x_ratio = s / total_dist
+            new_x = track_start[0] + (track_end[0] - track_start[0]) * x_ratio
+            m.move_to([new_x, track.get_center()[1] + OBJ_SIZE / 2 + 0.1, 0])
             current_int_t = int(t)
 
             if current_int_t > time_tracker.last_int_t:
                 current_center = m.get_center()
-
-                # 내부가 채워진 잔상 생성
-                ghost_base = Square(side_length=obj_size, color=YELLOW, fill_opacity=0.3, stroke_width=0)
+                ghost_base = Square(side_length=OBJ_SIZE, color=YELLOW, fill_opacity=0.3, stroke_width=0)
                 ghost_base.move_to(current_center)
-
                 ghost_group.add(ghost_base)
                 ghost_x_coords.append(current_center[0])
-
                 time_tracker.last_int_t = current_int_t
 
-        obj.add_updater(update_obj)
+        ball.add_updater(update_ball)
         self.play(
-            time_tracker.animate.set_value(total_time),
+            time_tracker.animate.set_value(self.TOTAL_TIME),
             run_time=6,
             rate_func=linear
         )
-        obj.remove_updater(update_obj)
+        ball.remove_updater(update_ball)
         self.wait(0.45)
 
-        # === 6. 이동거리 표시 및 s-t 그래프로 옮기기 ===
+    # ═══════════ Phase 4: 이동거리 표시 ═══════════
+    def show_displacement(self):
+        v = self.VELOCITY
         prev_s_val = 0
 
-        for i in range(1, len(ghost_x_coords)):
-            x_prev = ghost_x_coords[i-1]
-            x_curr = ghost_x_coords[i]
+        for i in range(1, len(self.ghost_x_coords)):
+            x_prev = self.ghost_x_coords[i - 1]
+            x_curr = self.ghost_x_coords[i]
 
-            # 트랙 위에 초록색 선 그리기
-            track_y = track.get_center()[1] - 0.2
+            # ── 트랙 위에 초록색 선 ──
+            track_y = self.track.get_center()[1] - 0.2
 
             interval_line = Line(
                 [x_prev, track_y, 0],
                 [x_curr, track_y, 0],
-                color=GREEN,
-                stroke_width=4
+                color=GREEN, stroke_width=4
             )
             self.play(Create(interval_line), run_time=0.75)
 
-            # 그래프 옮기기 위한 좌표 계산
+            # ── 그래프 옮기기 ──
             curr_t = i
             curr_s_val = v * curr_t
 
-            # 그래프 상의 목표 위치 계산
-            graph_x = axes_st.c2p(curr_t, 0)[0]
-            graph_y_bottom = axes_st.c2p(0, prev_s_val)[1]
-            graph_y_top = axes_st.c2p(0, curr_s_val)[1]
+            graph_x = self.axes_st.c2p(curr_t, 0)[0]
+            graph_y_bottom = self.axes_st.c2p(0, prev_s_val)[1]
+            graph_y_top = self.axes_st.c2p(0, curr_s_val)[1]
 
             vertical_line = Line(
                 [graph_x, graph_y_bottom, 0],
                 [graph_x, graph_y_top, 0],
-                color=GREEN,
-                stroke_width=6
+                color=GREEN, stroke_width=6
             )
 
             self.play(Transform(interval_line, vertical_line), run_time=0.9)
 
-            # 수평 대시 라인 (y축에서 점까지)
+            # ── 대시 라인 + 점 ──
             h_dash = DashedLine(
-                axes_st.c2p(0, curr_s_val),
-                axes_st.c2p(curr_t, curr_s_val),
-                color=GRAY,
-                stroke_width=1.5
+                self.axes_st.c2p(0, curr_s_val),
+                self.axes_st.c2p(curr_t, curr_s_val),
+                color=GRAY, stroke_width=1.5
             )
-            # 수직 대시 라인 (x축에서 점까지)
             v_dash = DashedLine(
-                axes_st.c2p(curr_t, 0),
-                axes_st.c2p(curr_t, curr_s_val),
-                color=GRAY,
-                stroke_width=1.5
+                self.axes_st.c2p(curr_t, 0),
+                self.axes_st.c2p(curr_t, curr_s_val),
+                color=GRAY, stroke_width=1.5
             )
-            new_dot = Dot(axes_st.c2p(curr_t, curr_s_val), color=RED, radius=0.08)
+            new_dot = Dot(self.axes_st.c2p(curr_t, curr_s_val), color=RED, radius=0.08)
             self.play(Create(h_dash), Create(v_dash), FadeIn(new_dot), run_time=0.45)
             self.play(FadeOut(interval_line), run_time=0.3)
 
             prev_s_val = curr_s_val
 
-        # === 7. s-t 그래프 직선 그리기 ===
-        st_graph = axes_st.plot(lambda t: v * t, x_range=[0, 4], color=RED, stroke_width=3)
-        self.play(Create(st_graph), run_time=1.5)
-
+        # ── s-t 직선 ──
+        self.st_graph = self.axes_st.plot(
+            lambda t: self.VELOCITY * t,
+            x_range=[0, 4], color=RED, stroke_width=3
+        )
+        self.play(Create(self.st_graph), run_time=1.5)
         self.wait(0.75)
 
-        # === 8. s-t 그래프의 기울기 = 속도 시각화 + v-t 점 찍기 ===
+    # ═══════════ Phase 5: s-t 기울기 → v-t ═══════════
+    def slope_to_vt(self):
+        v = self.VELOCITY
+
+        # ── 1. 연결 텍스트 ──
         connection_text = Text("s-t 그래프의 기울기 = 속도 (일정)", font_size=24, color=YELLOW)
         connection_text.to_edge(UP).shift(DOWN * 0.8)
         self.play(Write(connection_text), run_time=0.75)
 
-        # 기울기 삼각형 표시 (예: t=1~2 구간)
+        # ── 2. 기울기 삼각형 ──
         t1, t2 = 1, 2
         s1, s2 = v * t1, v * t2
 
-        # 삼각형 점들
-        p1 = axes_st.c2p(t1, s1)
-        p2 = axes_st.c2p(t2, s1)
-        p3 = axes_st.c2p(t2, s2)
+        p1 = self.axes_st.c2p(t1, s1)
+        p2 = self.axes_st.c2p(t2, s1)
+        p3 = self.axes_st.c2p(t2, s2)
 
-        # 삼각형 선
         delta_t_line = Line(p1, p2, color=BLUE, stroke_width=3)
         delta_s_line = Line(p2, p3, color=ORANGE, stroke_width=3)
 
-        delta_t_label = MathTex(r"\Delta t = 1\,\text{s}", font_size=20, color=BLUE).next_to(delta_t_line, DOWN, buff=0.1)
-        delta_s_label = MathTex(r"\Delta s = 5\,\text{m}", font_size=20, color=ORANGE).next_to(delta_s_line, RIGHT, buff=0.1)
+        delta_t_label = MathTex(r"\Delta t = 1\,\text{s}", font_size=self.FONT_LABEL, color=BLUE).next_to(delta_t_line, DOWN, buff=0.1)
+        delta_s_label = MathTex(r"\Delta s = 5\,\text{m}", font_size=self.FONT_LABEL, color=ORANGE).next_to(delta_s_line, RIGHT, buff=0.1)
 
         self.play(Create(delta_t_line), Create(delta_s_line), run_time=0.75)
         self.play(Write(delta_t_label), Write(delta_s_label), run_time=0.75)
 
-        # 기울기 = 속도
+        # ── 3. 기울기 = 속도 ──
         slope_text = MathTex(r"v = \frac{\Delta s}{\Delta t} = \frac{5\,\text{m}}{1\,\text{s}} = 5\,\text{m/s}", font_size=24, color=ORANGE)
-        slope_text.next_to(axes_st, UP, buff=0.3)
+        slope_text.next_to(self.axes_st, UP, buff=0.3)
         self.play(Write(slope_text), run_time=0.75)
-
         self.wait(0.75)
 
-        # v-t 그래프에 점 찍기 (기울기 값을 이동)
-        slope_dot = Dot(axes_st.c2p(1.5, 7.5), color=ORANGE, radius=0.1)
+        # ── 4. v-t 점 찍기 ──
+        slope_dot = Dot(self.axes_st.c2p(1.5, 7.5), color=ORANGE, radius=0.1)
         self.add(slope_dot)
 
-        # 각 초에 v-t 그래프에 점 찍기
         vt_dots = []
         for t in range(0, 5):
-            # v-t 그래프 위 대시 라인
             v_dash_vt = DashedLine(
-                axes_vt.c2p(t, 0),
-                axes_vt.c2p(t, v),
-                color=GRAY,
-                stroke_width=1.5
+                self.axes_vt.c2p(t, 0),
+                self.axes_vt.c2p(t, v),
+                color=GRAY, stroke_width=1.5
             )
-            vt_dot = Dot(axes_vt.c2p(t, v), color=RED, radius=0.08)
+            vt_dot = Dot(self.axes_vt.c2p(t, v), color=RED, radius=0.08)
             self.play(Create(v_dash_vt), FadeIn(vt_dot), run_time=0.45)
             vt_dots.append(vt_dot)
 
-        # v-t 그래프에 수평선 그리기
-        vt_graph = axes_vt.plot(lambda t: v, x_range=[0, 4], color=BLUE, stroke_width=3)
-        self.play(Create(vt_graph), run_time=1.5)
+        # ── 5. v-t 수평선 ──
+        self.vt_graph = self.axes_vt.plot(lambda t: v, x_range=[0, 4], color=BLUE, stroke_width=3)
+        self.play(Create(self.vt_graph), run_time=1.5)
 
-        # v = 5 라벨
-        v_label = MathTex("v = 5\\,\\text{m/s}", font_size=24, color=BLUE).next_to(axes_vt, UP, buff=0.3)
+        v_label = MathTex("v = 5\\,\\text{m/s}", font_size=24, color=BLUE).next_to(self.axes_vt, UP, buff=0.3)
         self.play(Write(v_label), run_time=0.75)
-
         self.wait(0.75)
 
-        # 정리
+        # ── 6. 정리 ──
         self.play(
             FadeOut(delta_t_line), FadeOut(delta_s_line),
             FadeOut(delta_t_label), FadeOut(delta_s_label),
@@ -263,15 +304,21 @@ class UniformMotion(Scene):
             run_time=0.75
         )
 
-        # === 9. v-t 그래프 적분 면적 = 변위 시각화 ===
+    # ═══════════ Phase 6: v-t 면적 = 변위 ═══════════
+    def area_to_displacement(self):
+        v = self.VELOCITY
+        vt_graph = self.vt_graph
+        axes_vt = self.axes_vt
+        axes_st = self.axes_st
+
+        # ── 1. 설명 텍스트 ──
         area_text = Text("v-t 그래프 아래 면적 = 변위 s", font_size=24, color=YELLOW)
         area_text.to_edge(UP).shift(DOWN * 0.8)
         self.play(Write(area_text), run_time=0.75)
 
-        # 시간 트래커 (적분용)
+        # ── 2. 동적 면적 ──
         t_integral = ValueTracker(0.01)
 
-        # 동적 면적 (직사각형)
         def get_area():
             t_val = t_integral.get_value()
             if t_val < 0.01:
@@ -279,14 +326,13 @@ class UniformMotion(Scene):
             area = axes_vt.get_area(
                 vt_graph,
                 x_range=[0, t_val],
-                color=BLUE,
-                opacity=0.4
+                color=BLUE, opacity=0.4
             )
             return area
 
         area_fill = always_redraw(get_area)
 
-        # 동적 면적 값 표시
+        # ── 3. 면적 값 표시 ──
         def get_area_value():
             t_val = t_integral.get_value()
             s_val = v * t_val
@@ -298,30 +344,27 @@ class UniformMotion(Scene):
 
         area_value_text = always_redraw(get_area_value)
 
-        # 동적 점 (s-t 그래프 위) - 면적과 연동
+        # ── 4. s-t 연동 점 ──
         moving_dot_st_area = always_redraw(lambda: Dot(
             axes_st.c2p(t_integral.get_value(), v * t_integral.get_value()),
-            color=BLUE,
-            radius=0.1
+            color=BLUE, radius=0.1
         ))
 
         self.add(area_fill)
         self.play(FadeIn(area_value_text), FadeIn(moving_dot_st_area), run_time=0.75)
 
-        # 1초마다 멈추면서 면적 값 표시
-        s_values = [5, 10, 15, 20]  # 각 초의 누적 이동거리
-
+        # ── 5. 1초마다 면적 값 표시 ──
+        s_values = [5, 10, 15, 20]
         area_center_label = None
 
         for t in range(1, 5):
             self.play(t_integral.animate.set_value(t), run_time=1.5, rate_func=linear)
 
-            # 면적 중앙 위치 계산
             center_t = t / 2
             center_v = v / 2
 
             new_label = MathTex(
-                f"{s_values[t-1]}\\,\\text{{m}}",
+                f"{s_values[t - 1]}\\,\\text{{m}}",
                 font_size=32,
                 color=WHITE
             ).move_to(axes_vt.c2p(center_t, center_v))
@@ -335,4 +378,31 @@ class UniformMotion(Scene):
 
             self.wait(0.75)
 
+        self.wait(3)
+
+    # ═══════════ Phase 7: 아웃트로 ═══════════
+    def outro(self):
+        # ── 1. 핵심 공식 ──
+        eq1 = MathTex("s", "=", "v", "t", font_size=48, color=WHITE)
+        eq2_left = Text("v-t 면적", font_size=self.FONT_SUBTITLE, color=WHITE)
+        eq2_right = Text("= 변위", font_size=self.FONT_SUBTITLE, color=WHITE)
+        eq2 = VGroup(eq2_left, eq2_right).arrange(RIGHT, buff=0.2)
+
+        formulas = VGroup(eq1, eq2).arrange(DOWN, buff=0.5)
+        formulas.move_to(UP * 0.5)
+
+        for eq in formulas:
+            self.play(Write(eq), run_time=0.8)
+            self.wait(0.3)
+
+        # ── 2. 타이틀 + 박스 ──
+        title = Text("등속 운동", font_size=44, color=YELLOW)
+        title.next_to(formulas, DOWN, buff=0.8)
+        box = SurroundingRectangle(
+            VGroup(formulas, title), color=YELLOW, buff=0.4,
+            corner_radius=0.15, stroke_width=4
+        )
+
+        self.play(Write(title), run_time=1.0)
+        self.play(Create(box), run_time=0.75)
         self.wait(3)

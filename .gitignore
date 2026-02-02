@@ -36,6 +36,11 @@ wheels/
 # Manim
 media/
 
+# 영상 출력물
+output/
+*.mp4
+*.mov
+
 # Environment
 .env
 .env.local
